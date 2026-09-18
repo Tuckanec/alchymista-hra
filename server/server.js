@@ -96,9 +96,11 @@ socket.on('disconnect', () => {
 });
 
 // Zapnutí serveru
-const PORT = 3001;
+// Použije port od Renderu, nebo 3001, pokud to spustíš lokálně
+const PORT = process.env.PORT || 3001;
+
 server.listen(PORT, () => {
-    console.log(`Server úspěšně míchá lektvary na portu ${PORT}`);
+    console.log(`Alchymistická laboratoř běží na portu ${PORT}`);
 });
 
 // POST endpoint pro registraci nového alchymisty
