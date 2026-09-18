@@ -15,7 +15,7 @@ const db = mysql.createPool({
 });
 
 // Testovací dotaz pro ověření připojení při startu
-pool.getConnection()
+db.getConnection()
     .then(connection => {
         console.log('📦 Databáze alchymistů úspěšně připojena.');
         connection.release();
@@ -24,4 +24,4 @@ pool.getConnection()
         console.error('❌ Chyba připojení k databázi:', err.message);
     });
 
-module.exports = pool;
+module.exports = db;
