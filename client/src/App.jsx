@@ -4,11 +4,12 @@ import Lobby from './Lobby';
 import Auth from './Auth'; // TOTO je ten klíčový import, který ti chyběl
 import './App.css';
 
-const socket = io('https://alchymista-hra.pages.dev');
+// Používáme adresu produkčního serveru na Renderu
+const socket = io('https://alchymista-hra.onrender.com');
 
 function App() {
   const [isConnected, setIsConnected] = useState(socket.connected);
-  
+
   // Stav, který drží informace o přihlášeném hráči (pokud je null, ukáže se formulář)
   const [user, setUser] = useState(null); 
 

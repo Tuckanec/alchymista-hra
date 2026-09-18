@@ -33,8 +33,8 @@ export default function Auth({ onLogin }) {
 const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Protože React běží na portu 5173 a server na 3001, musíme uvést celou adresu
-    const baseUrl = 'http://localhost:3001';
+    // Adresa backend serveru na Renderu
+    const baseUrl = 'https://alchymista-hra.onrender.com';
     const endpoint = isLogin ? '/api/login' : '/api/register';
     
     try {

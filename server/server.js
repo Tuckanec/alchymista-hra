@@ -5,17 +5,26 @@ const cors = require('cors');
 const db = require('./db');
 const bcrypt = require('bcrypt');
 
+// CORS konfigurace pro produkci (Cloudflare Pages) i lokální vývoj
+const allowedOrigins = [
+    'https://alchymista-hra.pages.dev',
+    'http://localhost:5173'
+];
+
+const corsOptions = {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+};
+
 const app = express();
-app.use(cors()); // Zásadní věc, aby se React z jiného portu vůbec domluvil se serverem
+app.use(cors(corsOptions)); // Povolí komunikaci z Cloudflare Pages a lokálního vývoje
 app.use(express.json()); // Dovolí serveru číst req.body v JSON formátu
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
-    cors: {
-        origin: "*", // Zatím povoleno všem, při nasazení to zamkneme jen na tvůj web
-        methods: ["GET", "POST"]
-    }
+    cors: corsOptions
 });
 
 // Paměť pro aktivní čekárny a hry
