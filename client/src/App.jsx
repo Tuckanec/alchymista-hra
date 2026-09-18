@@ -4,7 +4,7 @@ import Lobby from './Lobby';
 import Auth from './Auth'; // TOTO je ten klíčový import, který ti chyběl
 import './App.css';
 
-const socket = io('http://localhost:3001');
+const socket = io('https://alchymista-hra.pages.dev');
 
 function App() {
   const [isConnected, setIsConnected] = useState(socket.connected);
