@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from './supabaseClient';
 import './Auth.css';
 
-export default function Auth({ onLogin }) {
+export default function Auth({ onLogin, showToast }) {
     // Stav pro přepínání mezi formuláři (přihlášení / registrace)
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -14,7 +14,15 @@ export default function Auth({ onLogin }) {
         heslo: ''
     });
 
-    // Univerzální handler pro změnu jakéhokoliv inputu
+    const notify = (msg, type = 'info') => {
+        if (showToast) {
+            showToast(msg, type);
+        } else {
+            console.log(`[Toast ${type}]:`, msg);
+        }
+    };
+
+    // Handler pro změnu inputu
     const handleChange = (e) => {
         setFormData({ 
             ...formData, 
@@ -24,9 +32,9 @@ export default function Auth({ onLogin }) {
 
     const handleGuestLogin = () => {
         const randomId = Math.floor(Math.random() * 10000);
-        // Vygenerujeme dočasné jméno a označíme ho jako hosta
+        notify('Vstupuješ jako host.', 'info');
         onLogin({ 
-            prezdivka: `Toulavý_Mnich_${randomId}`, 
+            prezdivka: `Mnich_${randomId}`, 
             id: `guest_${randomId}`, 
             isGuest: true,
             role: 'host'
@@ -51,16 +59,16 @@ export default function Auth({ onLogin }) {
 
                 if (error) {
                     console.error('Chyba Supabase při přihlašování:', error);
-                    alert('🔌 Chyba při spojení se Supabase: ' + error.message);
+                    notify('Chyba při spojení se Supabase: ' + error.message, 'error');
                     return;
                 }
 
                 if (!uzivatel || uzivatel.heslo !== formData.heslo) {
-                    alert('❌ Neplatná přezdívka nebo heslo.');
+                    notify('Neplatná přezdívka nebo heslo.', 'error');
                     return;
                 }
 
-                alert('🧪 Vítej zpět v laboratoři, alchymisto!');
+                notify('Vítej zpět v laboratoři!', 'success');
                 onLogin({ 
                     prezdivka: uzivatel.prezdivka, 
                     id: String(uzivatel.id),
@@ -77,16 +85,16 @@ export default function Auth({ onLogin }) {
 
                 if (checkError) {
                     console.error('Chyba při kontrole uživatele:', checkError);
-                    alert('🔌 Chyba při ověřování: ' + checkError.message);
+                    notify('Chyba při ověřování: ' + checkError.message, 'error');
                     return;
                 }
 
                 if (existujici && existujici.length > 0) {
-                    alert('❌ Tato přezdívka nebo e-mail už v laboratoři existuje.');
+                    notify('Tato přezdívka nebo e-mail již existuje.', 'error');
                     return;
                 }
 
-                // Vložení nového učedníka do Supabase tabulky uzivatele
+                // Vložení nového hráče do tabulky uzivatele
                 const { error: insertError } = await supabase
                     .from('uzivatele')
                     .insert([
@@ -100,16 +108,16 @@ export default function Auth({ onLogin }) {
 
                 if (insertError) {
                     console.error('Chyba při registraci:', insertError);
-                    alert('❌ Registrace se nezdařila: ' + insertError.message);
+                    notify('Registrace se nezdařila: ' + insertError.message, 'error');
                     return;
                 }
 
-                alert('🧪 Přísaha složena, vítej v cechu! Nyní se můžeš přihlásit.');
+                notify('Registrace proběhla úspěšně! Nyní se můžeš přihlásit.', 'success');
                 setIsLogin(true);
             }
         } catch (error) {
             console.error('Neočekávaná chyba:', error);
-            alert('🔌 Nepodařilo se spojit se Supabase.');
+            notify('Nepodařilo se spojit se Supabase.', 'error');
         } finally {
             setLoading(false);
         }
@@ -118,69 +126,86 @@ export default function Auth({ onLogin }) {
     return (
         <div className="auth-container">
             <div className="auth-box">
-                <h2>{isLogin ? 'Vstup do laboratoře' : 'Registrace učedníka'}</h2>
+                <h2>{isLogin ? 'Přihlášení do hry' : 'Registrace alchymisty'}</h2>
                 
                 <form onSubmit={handleSubmit}>
                     <div className="input-group">
-                        <label>Přezdívka:</label>
+                        <label htmlFor="prezdivka">Přezdívka</label>
                         <input
+                            id="prezdivka"
                             type="text"
                             name="prezdivka"
+                            placeholder="Zadej přezdívku"
                             value={formData.prezdivka}
                             onChange={handleChange}
                             required
                             disabled={loading}
+                            autoComplete="username"
                         />
                     </div>
                     
-                    {/* E-mail se vyrenderuje pouze při registraci */}
                     {!isLogin && (
                         <div className="input-group">
-                            <label>E-mail:</label>
+                            <label htmlFor="email">E-mail</label>
                             <input
+                                id="email"
                                 type="email"
                                 name="email"
+                                placeholder="Zadej e-mail"
                                 value={formData.email}
                                 onChange={handleChange}
                                 required
                                 disabled={loading}
+                                autoComplete="email"
                             />
                         </div>
                     )}
 
                     <div className="input-group">
-                        <label>Heslo:</label>
+                        <label htmlFor="heslo">Heslo</label>
                         <input
+                            id="heslo"
                             type="password"
                             name="heslo"
+                            placeholder="••••••••"
                             value={formData.heslo}
                             onChange={handleChange}
                             required
                             disabled={loading}
+                            autoComplete={isLogin ? 'current-password' : 'new-password'}
                         />
                     </div>
 
                     <button type="submit" className="auth-button" disabled={loading}>
                         {loading 
-                            ? 'Míchám lektvary...' 
-                            : (isLogin ? 'Namíchat lektvar (Přihlásit)' : 'Složit přísahu (Registrovat)')}
+                            ? 'Ověřuji...' 
+                            : (isLogin ? 'Přihlásit se' : 'Zaregistrovat se')}
                     </button>
                     
-                    {/* Tlačítko pro hosta */}
                     <button 
                         type="button" 
                         className="guest-button" 
                         onClick={handleGuestLogin}
                         disabled={loading}
                     >
-                        Proklouznout jako host
+                        Pokračovat jako host
                     </button>
                 </form>
 
-                <p className="toggle-text" onClick={() => !loading && setIsLogin(!isLogin)}>
+                <p 
+                    className="toggle-text" 
+                    onClick={() => !loading && setIsLogin(!isLogin)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            !loading && setIsLogin(!isLogin);
+                        }
+                    }}
+                >
                     {isLogin 
-                        ? 'Nemáš ještě svůj kotlík? Zaregistruj se.' 
-                        : 'Už jsi plnohodnotný alchymista? Přihlas se.'}
+                        ? 'Nemáš účet? Zaregistruj se' 
+                        : 'Máš již účet? Přihlas se'}
                 </p>
             </div>
         </div>

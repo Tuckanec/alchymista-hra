@@ -1,0 +1,339 @@
+/* Moderní minimalistický design pro Lobby */
+.lobby-wrapper {
+    max-width: 480px;
+    margin: 40px auto;
+    padding: 0 16px;
+    width: 100%;
+}
+
+.lobby-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.lobby-user-info {
+    font-size: 14px;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.lobby-user-name {
+    color: #f3f4f6;
+    font-weight: 600;
+}
+
+.badge-guest {
+    font-size: 11px;
+    color: #9ca3af;
+    background: #20222c;
+    border: 1px solid #2d2f3b;
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+
+.btn-logout {
+    background: transparent;
+    border: 1px solid #2d2f3b;
+    color: #9ca3af;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s ease;
+}
+
+.btn-logout:hover {
+    background: #1e2029;
+    color: #f3f4f6;
+    border-color: #3f4252;
+}
+
+.lobby-card {
+    background: #181920;
+    border: 1px solid #282a36;
+    border-radius: 8px;
+    padding: 28px 24px;
+    text-align: center;
+}
+
+.lobby-title {
+    margin: 0 0 6px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #f3f4f6;
+}
+
+.lobby-subtitle {
+    margin: 0 0 24px 0;
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+.btn-create-room {
+    width: 100%;
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    background: #10b981;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    transition: background-color 0.15s ease;
+}
+
+.btn-create-room:hover:not(:disabled) {
+    background: #059669;
+}
+
+.btn-create-room:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.join-section {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid #242632;
+}
+
+.join-form {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.pin-input {
+    width: 130px;
+    padding: 10px 12px;
+    background: #121318;
+    border: 1px solid #2d2f3b;
+    border-radius: 6px;
+    color: #f3f4f6;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.pin-input:focus {
+    border-color: #3b82f6;
+}
+
+.btn-join {
+    padding: 10px 18px;
+    background: #20222c;
+    border: 1px solid #2d2f3b;
+    color: #f3f4f6;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-join:hover:not(:disabled) {
+    background: #282a38;
+    border-color: #3f4252;
+}
+
+.btn-join:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Room waiting screen */
+.room-header {
+    margin-bottom: 20px;
+}
+
+.room-code-tag {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #10b981;
+    background: #121318;
+    border: 1px solid #282a36;
+    padding: 8px 18px;
+    border-radius: 6px;
+    margin: 12px 0 6px 0;
+}
+
+.room-players-box {
+    background: #121318;
+    border: 1px solid #242632;
+    border-radius: 6px;
+    padding: 16px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.room-players-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.room-players-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #e5e7eb;
+}
+
+.realtime-pill {
+    font-size: 11px;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.player-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.player-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 6px;
+    border-bottom: 1px solid #1c1d26;
+    font-size: 14px;
+    color: #d1d5db;
+}
+
+.player-item:last-child {
+    border-bottom: none;
+}
+
+.player-me {
+    color: #10b981;
+    font-size: 12px;
+    margin-left: 6px;
+}
+
+.host-role-notice {
+    font-size: 12px;
+    color: #9ca3af;
+    margin: 8px 0 0 0;
+    text-align: center;
+}
+
+.room-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.btn-secondary {
+    padding: 8px 14px;
+    background: #181920;
+    border: 1px solid #2d2f3b;
+    color: #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: #20222c;
+    border-color: #3f4252;
+    color: #f3f4f6;
+}
+
+.btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-leave {
+    padding: 8px 14px;
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-leave:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+}
+
+/* Leaderboard section */
+.leaderboard-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #242632;
+}
+
+.leaderboard-toggle-btn {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px;
+    transition: color 0.15s ease;
+}
+
+.leaderboard-toggle-btn:hover {
+    color: #f3f4f6;
+}
+
+.leaderboard-card {
+    background: #121318;
+    border: 1px solid #242632;
+    border-radius: 6px;
+    padding: 16px;
+    margin-top: 12px;
+    text-align: left;
+}
+
+.leaderboard-card h4 {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f3f4f6;
+}
+
+.leaderboard-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.leaderboard-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 4px;
+    border-bottom: 1px solid #1c1d26;
+    font-size: 13px;
+    color: #d1d5db;
+}
+
+.leaderboard-item:last-child {
+    border-bottom: none;
+}
+
+.leaderboard-score {
+    color: #10b981;
+    font-weight: 600;
+}

@@ -1,117 +1,123 @@
-/* Auth.css */
+/* Moderní minimalistický Auth design */
 .auth-container {
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    background: radial-gradient(circle at center, #2b1055 0%, #080411 100%);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #e0d6ff;
+    background-color: #0f1117;
+    padding: 20px;
 }
 
 .auth-box {
-    background: rgba(20, 10, 30, 0.85);
-    border: 2px solid #5a3e85;
-    border-radius: 12px;
-    padding: 40px;
+    background: #181920;
+    border: 1px solid #282a36;
+    border-radius: 8px;
+    padding: 32px 28px;
     width: 100%;
-    max-width: 400px;
-    box-shadow: 0 0 25px rgba(90, 62, 133, 0.5);
+    max-width: 380px;
     text-align: center;
 }
 
 .auth-box h2 {
-    margin-top: 0;
-    margin-bottom: 25px;
-    color: #4ade80; /* Toxická lektvarová zelená */
-    text-shadow: 0 0 10px rgba(74, 222, 128, 0.4);
-    letter-spacing: 1px;
+    margin: 0 0 24px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #f3f4f6;
+    letter-spacing: -0.2px;
 }
 
 .input-group {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     text-align: left;
 }
 
 .input-group label {
     display: block;
-    margin-bottom: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #bfa9db;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #9ca3af;
 }
 
 .input-group input {
     width: 100%;
-    box-sizing: border-box;
-    padding: 12px;
-    border: 1px solid #5a3e85;
-    background: #1a0f2e;
-    color: #ffffff;
+    padding: 10px 12px;
+    background: #121318;
+    border: 1px solid #2d2f3b;
     border-radius: 6px;
+    color: #f3f4f6;
+    font-size: 14px;
     outline: none;
-    transition: all 0.3s ease;
+    transition: border-color 0.15s ease;
 }
 
 .input-group input:focus {
-    border-color: #4ade80;
-    box-shadow: 0 0 10px rgba(74, 222, 128, 0.2);
-    background: #23153d;
+    border-color: #3b82f6;
+}
+
+.input-group input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .auth-button {
     width: 100%;
-    padding: 14px;
-    margin-top: 10px;
-    background: #4ade80;
-    color: #080411;
+    padding: 11px 16px;
+    margin-top: 8px;
+    background: #10b981;
+    color: #ffffff;
     border: none;
     border-radius: 6px;
-    font-weight: bold;
-    font-size: 16px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.auth-button:hover {
-    background: #22c55e;
-    box-shadow: 0 0 15px rgba(74, 222, 128, 0.6);
-    transform: translateY(-2px);
-}
-
-.toggle-text {
-    margin-top: 25px;
+    font-weight: 500;
     font-size: 14px;
-    color: #a78bfa;
     cursor: pointer;
-    transition: color 0.3s ease;
+    transition: background-color 0.15s ease;
 }
 
-.toggle-text:hover {
-    color: #ffffff;
-    text-decoration: underline;
+.auth-button:hover:not(:disabled) {
+    background: #059669;
+}
+
+.auth-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .guest-button {
     width: 100%;
-    padding: 12px;
-    margin-top: 15px;
+    padding: 10px 16px;
+    margin-top: 10px;
     background: transparent;
-    color: #a78bfa;
-    border: 2px solid #5a3e85;
+    color: #9ca3af;
+    border: 1px solid #2d2f3b;
     border-radius: 6px;
-    font-weight: bold;
+    font-weight: 500;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.3s ease;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    transition: all 0.15s ease;
 }
 
-.guest-button:hover {
-    background: rgba(90, 62, 133, 0.3);
-    border-color: #a78bfa;
-    color: #ffffff;
+.guest-button:hover:not(:disabled) {
+    background: #20222c;
+    border-color: #3f4252;
+    color: #f3f4f6;
+}
+
+.guest-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.toggle-text {
+    margin-top: 24px;
+    margin-bottom: 0;
+    font-size: 13px;
+    color: #9ca3af;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.toggle-text:hover {
+    color: #f3f4f6;
+    text-decoration: underline;
 }

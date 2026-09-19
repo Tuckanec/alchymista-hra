@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import './Lobby.css';
 
-export default function Lobby({ user, onLogout }) {
+export default function Lobby({ user, onLogout, showToast }) {
     const [joinCode, setJoinCode] = useState('');
     const [currentRoom, setCurrentRoom] = useState(null);
     const [isHost, setIsHost] = useState(false);
@@ -12,6 +13,14 @@ export default function Lobby({ user, onLogout }) {
     const [showScores, setShowScores] = useState(false);
     const [leaderboard, setLeaderboard] = useState([]);
     const [submittingScore, setSubmittingScore] = useState(false);
+
+    const notify = (msg, type = 'info') => {
+        if (showToast) {
+            showToast(msg, type);
+        } else {
+            console.log(`[Toast ${type}]:`, msg);
+        }
+    };
 
     // 1. Načtení žebříčku a realtime odběr změn v tabulce 'skore'
     useEffect(() => {
@@ -33,7 +42,6 @@ export default function Lobby({ user, onLogout }) {
             }
         };
 
-        // Asynchronní načtení dat
         loadScores();
 
         // Realtime odběr změn skóre
@@ -76,7 +84,6 @@ export default function Lobby({ user, onLogout }) {
             }
         };
 
-        // Asynchronní počáteční stažení hráčů
         loadRoomPlayers();
 
         // Odběr Realtime změn v tabulce 'room_players' pro danou místnost
@@ -91,13 +98,12 @@ export default function Lobby({ user, onLogout }) {
                     filter: `room_code=eq.${currentRoom}`
                 },
                 (payload) => {
-                    console.log('⚡ Supabase Realtime změna v laboratoři:', payload);
+                    console.log('⚡ Supabase Realtime změna:', payload);
                     loadRoomPlayers();
                 }
             )
             .subscribe();
 
-        // Cleanup: odhlášení kanálu při opuštění místnosti nebo unmountu
         return () => {
             isCancelled = true;
             supabase.removeChannel(roomChannel);
@@ -108,7 +114,6 @@ export default function Lobby({ user, onLogout }) {
     const handleCreateRoom = async () => {
         setLoading(true);
         try {
-            // Vygenerujeme náhodný 4místný kód (např. 7K2M)
             const newCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
             // 1. Vložíme místnost do tabulky 'rooms'
@@ -125,7 +130,7 @@ export default function Lobby({ user, onLogout }) {
 
             if (roomError) {
                 console.error('Chyba při zakládání místnosti:', roomError);
-                alert('❌ Nepodařilo se založit laboratoř: ' + roomError.message);
+                notify('Nepodařilo se založit laboratoř: ' + roomError.message, 'error');
                 return;
             }
 
@@ -144,15 +149,16 @@ export default function Lobby({ user, onLogout }) {
 
             if (playerError) {
                 console.error('Chyba při zápisu hráče:', playerError);
-                alert('❌ Chyba při vstupu do laboratoře: ' + playerError.message);
+                notify('Chyba při vstupu do laboratoře: ' + playerError.message, 'error');
                 return;
             }
 
             setCurrentRoom(newCode);
             setIsHost(true);
+            notify(`Laboratoř ${newCode} byla vytvořena.`, 'success');
         } catch (err) {
             console.error('Neočekávaná chyba při tvorbě místnosti:', err);
-            alert('🔌 Chyba spojení se Supabase.');
+            notify('Chyba spojení se Supabase.', 'error');
         } finally {
             setLoading(false);
         }
@@ -175,12 +181,12 @@ export default function Lobby({ user, onLogout }) {
 
             if (roomError) {
                 console.error('Chyba vyhledání místnosti:', roomError);
-                alert('🔌 Chyba při vyhledávání: ' + roomError.message);
+                notify('Chyba při vyhledávání: ' + roomError.message, 'error');
                 return;
             }
 
             if (!room) {
-                alert('❌ Tato laboratoř neexistuje nebo už vybuchla.');
+                notify('Tato laboratoř neexistuje nebo byla zrušena.', 'error');
                 return;
             }
 
@@ -193,7 +199,6 @@ export default function Lobby({ user, onLogout }) {
                 .maybeSingle();
 
             if (!existing) {
-                // Přidáme hráče do 'room_players'
                 const { error: joinError } = await supabase
                     .from('room_players')
                     .insert([
@@ -208,7 +213,7 @@ export default function Lobby({ user, onLogout }) {
 
                 if (joinError) {
                     console.error('Chyba při připojování:', joinError);
-                    alert('❌ Nepodařilo se připojit: ' + joinError.message);
+                    notify('Nepodařilo se připojit: ' + joinError.message, 'error');
                     return;
                 }
             }
@@ -216,9 +221,10 @@ export default function Lobby({ user, onLogout }) {
             setCurrentRoom(code);
             setIsHost(room.host_id === String(user.id));
             setJoinCode('');
+            notify(`Připojeno do laboratoře ${code}.`, 'success');
         } catch (err) {
             console.error('Neočekávaná chyba připojení:', err);
-            alert('🔌 Chyba spojení se Supabase.');
+            notify('Chyba spojení se Supabase.', 'error');
         } finally {
             setLoading(false);
         }
@@ -229,20 +235,19 @@ export default function Lobby({ user, onLogout }) {
         if (!currentRoom) return;
 
         try {
-            // Smažeme hráče z room_players (vyvolá Realtime DELETE event pro ostatní hráče)
             await supabase
                 .from('room_players')
                 .delete()
                 .eq('room_code', currentRoom)
                 .eq('player_id', String(user.id));
 
-            // Pokud místnost opustí host, smažeme záznam z rooms
             if (isHost) {
                 await supabase
                     .from('rooms')
                     .delete()
                     .eq('room_code', currentRoom);
             }
+            notify('Laboratoř opuštěna.', 'info');
         } catch (err) {
             console.error('Chyba při opuštění místnosti:', err);
         } finally {
@@ -252,7 +257,7 @@ export default function Lobby({ user, onLogout }) {
         }
     };
 
-    // Zkušební uložení alchymistického skóre do tabulky skore
+    // Uložení testovacího skóre do tabulky skore
     const handleSaveSampleScore = async () => {
         setSubmittingScore(true);
         try {
@@ -267,12 +272,13 @@ export default function Lobby({ user, onLogout }) {
                 ]);
 
             if (error) {
-                alert('❌ Chyba při ukládání skóre: ' + error.message);
+                notify('Chyba při ukládání skóre: ' + error.message, 'error');
             } else {
-                alert(`⚗️ Zapsáno ${nahodneBody} alchymistických bodů do Síně slávy!`);
+                notify(`Zapsáno ${nahodneBody} bodů do Síně slávy!`, 'success');
             }
         } catch (err) {
             console.error('Chyba skóre:', err);
+            notify('Chyba při zápisu skóre.', 'error');
         } finally {
             setSubmittingScore(false);
         }
@@ -281,86 +287,59 @@ export default function Lobby({ user, onLogout }) {
     // UI pro čekárnu (Waiting Room v laboratoři)
     if (currentRoom) {
         return (
-            <div style={{ textAlign: 'center', marginTop: '40px', color: '#e0d6ff' }}>
-                <h2>🏰 Laboratoř: <span style={{ color: '#4ade80', letterSpacing: '3px' }}>{currentRoom}</span></h2>
-                <p style={{ color: '#bfa9db' }}>Pošli tento kód dalším alchymistům, ať se připojí ke kotlíku!</p>
-                
-                <div style={{
-                    background: 'rgba(20, 10, 30, 0.85)',
-                    padding: '24px',
-                    borderRadius: '12px',
-                    maxWidth: '360px',
-                    margin: '25px auto',
-                    border: '1px solid #5a3e85',
-                    boxShadow: '0 0 20px rgba(90, 62, 133, 0.4)'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                        <h3 style={{ margin: 0, color: '#e0d6ff' }}>Učedníci u kotlíku:</h3>
-                        <span style={{ fontSize: '12px', background: '#5a3e85', padding: '3px 8px', borderRadius: '12px' }}>
-                            ⚡ Realtime
-                        </span>
+            <div className="lobby-wrapper">
+                <div className="lobby-card">
+                    <div className="room-header">
+                        <div style={{ fontSize: '13px', color: '#9ca3af' }}>Kód laboratoře</div>
+                        <div className="room-code-tag">{currentRoom}</div>
+                        <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#9ca3af' }}>
+                            Sdílej tento kód s ostatními hráči
+                        </p>
                     </div>
 
-                    <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px 0' }}>
-                        {players.map((p) => {
-                            const isMe = String(p.player_id) === String(user.id);
-                            return (
-                                <li 
-                                    key={p.id || p.player_id} 
-                                    style={{ 
-                                        padding: '10px', 
-                                        borderBottom: '1px solid rgba(90, 62, 133, 0.5)',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center'
-                                    }}
-                                >
-                                    <span>
-                                        {p.is_host && '👑 '}
-                                        <strong>{p.prezdivka}</strong> {isMe && <span style={{ color: '#4ade80' }}>(Ty)</span>}
-                                    </span>
-                                    {p.is_guest && <span style={{ fontSize: '11px', color: '#a78bfa' }}>[Host]</span>}
-                                </li>
-                            );
-                        })}
-                    </ul>
+                    <div className="room-players-box">
+                        <div className="room-players-header">
+                            <h3>Připojení hráči ({players.length})</h3>
+                            <span className="realtime-pill">Realtime</span>
+                        </div>
 
-                    {isHost && (
-                        <p style={{ fontSize: '13px', color: '#4ade80', margin: '10px 0' }}>
-                            Jsi správcem této laboratoře.
-                        </p>
-                    )}
+                        <ul className="player-list">
+                            {players.map((p) => {
+                                const isMe = String(p.player_id) === String(user.id);
+                                return (
+                                    <li key={p.id || p.player_id} className="player-item">
+                                        <span>
+                                            {p.is_host ? '👑 ' : ''}
+                                            {p.prezdivka}
+                                            {isMe && <span className="player-me">(Ty)</span>}
+                                        </span>
+                                        {p.is_guest && <span className="badge-guest">Host</span>}
+                                    </li>
+                                );
+                            })}
+                        </ul>
 
-                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '15px' }}>
+                        {isHost && (
+                            <p className="host-role-notice">Jsi správcem této laboratoře.</p>
+                        )}
+                    </div>
+
+                    <div className="room-actions">
                         <button
+                            type="button"
                             onClick={handleSaveSampleScore}
                             disabled={submittingScore}
-                            style={{
-                                padding: '8px 14px',
-                                fontSize: '13px',
-                                cursor: 'pointer',
-                                background: '#5a3e85',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px'
-                            }}
+                            className="btn-secondary"
                         >
-                            {submittingScore ? 'Zapisuji...' : '🧪 Zapsat skóre'}
+                            {submittingScore ? 'Zapisuji...' : 'Zapsat body'}
                         </button>
 
                         <button 
+                            type="button"
                             onClick={handleLeaveRoom}
-                            style={{ 
-                                padding: '8px 14px', 
-                                fontSize: '13px', 
-                                cursor: 'pointer', 
-                                background: 'transparent', 
-                                color: '#f87171', 
-                                border: '1px solid #f87171', 
-                                borderRadius: '6px' 
-                            }}
+                            className="btn-leave"
                         >
-                            🚪 Opustit laboratoř
+                            Opustit laboratoř
                         </button>
                     </div>
                 </div>
@@ -370,163 +349,97 @@ export default function Lobby({ user, onLogout }) {
 
     // UI pro výběr akce (Lobby menu)
     return (
-        <div style={{ textAlign: 'center', marginTop: '30px', color: '#e0d6ff' }}>
-            <div style={{ maxWidth: '500px', margin: '0 auto', padding: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <span style={{ fontSize: '14px', color: '#bfa9db' }}>
-                        Alchymista: <strong style={{ color: '#4ade80' }}>{user.prezdivka}</strong>
-                        {user.isGuest && <span style={{ color: '#a78bfa', marginLeft: '6px' }}>[Host]</span>}
-                    </span>
-                    {onLogout && (
-                        <button 
-                            onClick={onLogout}
-                            style={{
-                                background: 'transparent',
-                                border: '1px solid #5a3e85',
-                                color: '#bfa9db',
-                                padding: '4px 10px',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '12px'
-                            }}
-                        >
-                            Odhlásit se
-                        </button>
-                    )}
+        <div className="lobby-wrapper">
+            <div className="lobby-topbar">
+                <div className="lobby-user-info">
+                    <span>Hráč:</span>
+                    <span className="lobby-user-name">{user.prezdivka}</span>
+                    {user.isGuest && <span className="badge-guest">Host</span>}
                 </div>
 
-                <h2>Vítej u alchymistického kotlíku!</h2>
-                <p style={{ color: '#bfa9db', fontSize: '15px' }}>
-                    Založ novou laboratoř pro své přátele nebo se připoj pomocí kódu.
-                </p>
-                
-                <div style={{ margin: '35px 0' }}>
+                {onLogout && (
                     <button 
-                        onClick={handleCreateRoom}
-                        disabled={loading}
-                        style={{ 
-                            padding: '14px 28px', 
-                            fontSize: '17px', 
-                            cursor: loading ? 'not-allowed' : 'pointer', 
-                            background: '#5a3e85', 
-                            color: 'white', 
-                            border: '1px solid #7c3aed', 
-                            borderRadius: '8px',
-                            fontWeight: 'bold',
-                            boxShadow: '0 0 15px rgba(124, 58, 237, 0.4)',
-                            transition: 'all 0.2s ease'
-                        }}
+                        type="button"
+                        onClick={onLogout}
+                        className="btn-logout"
                     >
-                        {loading ? 'Zakládám...' : '➕ Založit novou laboratoř'}
+                        Odhlásit se
                     </button>
-                </div>
+                )}
+            </div>
 
-                <hr style={{ maxWidth: '280px', borderColor: 'rgba(90, 62, 133, 0.5)', margin: '25px auto' }} />
+            <div className="lobby-card">
+                <h2 className="lobby-title">Alchymistická dílna</h2>
+                <p className="lobby-subtitle">Založ novou laboratoř nebo se připoj ke hře pomocí PIN kódu.</p>
 
-                <div style={{ margin: '30px 0' }}>
-                    <form onSubmit={handleJoinRoom}>
+                <button 
+                    type="button"
+                    onClick={handleCreateRoom}
+                    disabled={loading}
+                    className="btn-create-room"
+                >
+                    {loading ? 'Vytvářím...' : 'Založit novou laboratoř'}
+                </button>
+
+                <div className="join-section">
+                    <form onSubmit={handleJoinRoom} className="join-form">
                         <input 
                             type="text" 
-                            placeholder="KÓD PIN" 
+                            placeholder="PIN KÓD" 
                             value={joinCode}
                             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                             maxLength={6}
                             disabled={loading}
-                            style={{ 
-                                padding: '12px', 
-                                fontSize: '16px', 
-                                width: '130px', 
-                                textAlign: 'center', 
-                                background: '#1a0f2e', 
-                                color: 'white', 
-                                border: '1px solid #5a3e85', 
-                                borderRadius: '6px',
-                                letterSpacing: '2px',
-                                fontWeight: 'bold'
-                            }}
+                            className="pin-input"
+                            aria-label="Kód laboratoře"
                         />
                         <button 
                             type="submit" 
                             disabled={loading || !joinCode}
-                            style={{ 
-                                padding: '12px 22px', 
-                                fontSize: '16px', 
-                                marginLeft: '10px', 
-                                cursor: (loading || !joinCode) ? 'not-allowed' : 'pointer', 
-                                background: '#4ade80', 
-                                color: '#080411', 
-                                border: 'none', 
-                                borderRadius: '6px', 
-                                fontWeight: 'bold' 
-                            }}
+                            className="btn-join"
                         >
                             Připojit se
                         </button>
                     </form>
                 </div>
 
-                {/* Síň slávy (Žebříček ze Supabase tabulky skore) */}
-                <div style={{ marginTop: '40px', borderTop: '1px solid rgba(90, 62, 133, 0.4)', paddingTop: '20px' }}>
+                <div className="leaderboard-section">
                     <button
+                        type="button"
                         onClick={() => setShowScores(!showScores)}
-                        style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#a78bfa',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            textDecoration: 'underline'
-                        }}
+                        className="leaderboard-toggle-btn"
                     >
-                        {showScores ? '▲ Skrýt Síň slávy' : '🏆 Zobrazit Síň slávy (nejlepší alchymisté)'}
+                        {showScores ? '▲ Skrýt Síň slávy' : '▼ Zobrazit Síň slávy'}
                     </button>
 
                     {showScores && (
-                        <div style={{
-                            background: 'rgba(20, 10, 30, 0.8)',
-                            padding: '16px',
-                            borderRadius: '8px',
-                            marginTop: '15px',
-                            border: '1px solid #5a3e85'
-                        }}>
-                            <h4 style={{ margin: '0 0 12px 0', color: '#4ade80' }}>🏆 Nejlepší alchymisté (Supabase)</h4>
+                        <div className="leaderboard-card">
+                            <h4>Nejlepší alchymisté</h4>
                             {leaderboard.length === 0 ? (
-                                <p style={{ fontSize: '13px', color: '#9ca3af' }}>Zatím žádné záznamy v síni slávy.</p>
+                                <p style={{ fontSize: '13px', color: '#9ca3af', margin: 0 }}>
+                                    Zatím žádné záznamy.
+                                </p>
                             ) : (
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                                <ul className="leaderboard-list">
                                     {leaderboard.map((item, index) => (
-                                        <li 
-                                            key={item.id || index}
-                                            style={{
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                padding: '6px 8px',
-                                                borderBottom: '1px solid rgba(90, 62, 133, 0.3)',
-                                                fontSize: '14px'
-                                            }}
-                                        >
+                                        <li key={item.id || index} className="leaderboard-item">
                                             <span>{index + 1}. {item.prezdivka}</span>
-                                            <strong style={{ color: '#4ade80' }}>{item.body} b.</strong>
+                                            <span className="leaderboard-score">{item.body} b.</span>
                                         </li>
                                     ))}
                                 </ul>
                             )}
-                            <button
-                                onClick={handleSaveSampleScore}
-                                disabled={submittingScore}
-                                style={{
-                                    marginTop: '15px',
-                                    padding: '8px 16px',
-                                    fontSize: '12px',
-                                    background: '#5a3e85',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                {submittingScore ? 'Zapisuji...' : '⚗️ Zapsat náhodné skóre'}
-                            </button>
+                            <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveSampleScore}
+                                    disabled={submittingScore}
+                                    className="btn-secondary"
+                                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                                >
+                                    {submittingScore ? 'Zapisuji...' : 'Zapsat body'}
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
