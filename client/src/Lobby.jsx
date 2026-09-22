@@ -23,6 +23,43 @@ export default function Lobby({ user, onLogout, showToast }) {
     }, [showToast]);
 
     // =========================================================
+    // 0. AUTOMATICKÝ RECONNECT PO OBNOVENÍ STRÁNKY (F5)
+    // =========================================================
+    useEffect(() => {
+        if (!user || !user.id || currentRoom) return;
+
+        let isCancelled = false;
+
+        const checkActiveRoom = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('room_players')
+                    .select('*')
+                    .eq('player_id', Number(user.id))
+                    .order('joined_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (!isCancelled && !error && data) {
+                    prevStatusRef.current = data.status;
+                    setMyPlayerStatus(data.status);
+                    setIsHost(!!data.is_host);
+                    setCurrentRoom(data.room_code);
+                    notify(`Návrat do laboratoře ${data.room_code}.`, 'info');
+                }
+            } catch (err) {
+                console.error('Chyba při automatickém reconnectu do laboratoře:', err);
+            }
+        };
+
+        checkActiveRoom();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [user, currentRoom, notify]);
+
+    // =========================================================
     // 1. NAČTENÍ AKTIVNÍCH LABORATOŘÍ A REALTIME ODBĚR 'rooms'
     // =========================================================
     useEffect(() => {
@@ -103,11 +140,11 @@ export default function Lobby({ user, onLogout, showToast }) {
                         prevStatusRef.current = me.status;
                         setMyPlayerStatus(me.status);
                     } else {
-                        // Hráč v místnosti již neexistuje (byl odmítnut nebo odebrán)
+                        // Hráč v místnosti již neexistuje (byl vyhozen správcem nebo byla místnost zrušena)
                         if (prevStatusRef.current === 'pending') {
                             notify('Správce zamítl tvoji žádost o vstup do laboratoře.', 'error');
                         } else if (prevStatusRef.current === 'approved') {
-                            notify('Byl jsi odebrán z laboratoře nebo byla místnost zrušena.', 'info');
+                            notify('Byl jsi vyhozen z laboratoře.', 'error');
                         }
                         prevStatusRef.current = null;
                         setCurrentRoom(null);
@@ -149,6 +186,11 @@ export default function Lobby({ user, onLogout, showToast }) {
     // 3. ZALOŽENÍ NOVÉ LABORATOŘE
     // =========================================================
     const handleCreateRoom = async () => {
+        if (!user || !user.id || isNaN(Number(user.id))) {
+            notify('Neplatná relace uživatele. Prosím obnov stránku (Ctrl+F5) a přihlas se znovu.', 'error');
+            return;
+        }
+
         setLoading(true);
         try {
             const newCode = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -208,6 +250,11 @@ export default function Lobby({ user, onLogout, showToast }) {
     const joinLaboratoryByCode = async (targetCode) => {
         const code = targetCode.trim().toUpperCase();
         if (!code) return;
+
+        if (!user || !user.id || isNaN(Number(user.id))) {
+            notify('Neplatná relace uživatele. Prosím obnov stránku (Ctrl+F5) a přihlas se znovu.', 'error');
+            return;
+        }
 
         setLoading(true);
         try {
@@ -338,6 +385,27 @@ export default function Lobby({ user, onLogout, showToast }) {
             }
         } catch (err) {
             console.error('Chyba při zamítnutí:', err);
+        }
+    };
+
+    // =========================================================
+    // 5b. VYKOPNUTÍ HRÁČE / DUCHA (KICK PLAYER)
+    // =========================================================
+    const handleKickPlayer = async (targetPlayer) => {
+        const playerName = targetPlayer.uzivatele?.prezdivka || 'Hráč';
+        try {
+            const { error } = await supabase
+                .from('room_players')
+                .delete()
+                .eq('id', targetPlayer.id);
+
+            if (error) {
+                notify('Chyba při vyhazování hráče: ' + error.message, 'error');
+            } else {
+                notify(`Hráč ${playerName} byl vykázán z laboratoře.`, 'info');
+            }
+        } catch (err) {
+            console.error('Chyba při kicku hráče:', err);
         }
     };
 
@@ -533,10 +601,10 @@ export default function Lobby({ user, onLogout, showToast }) {
                         </div>
                     )}
 
-                    {/* Schválení alchymisté v místnosti */}
+                    {/* Učedníci u kotlíku v místnosti */}
                     <div className="room-players-box">
                         <div className="room-players-header">
-                            <h3>Schválení alchymisté ({approvedPlayers.length})</h3>
+                            <h3>Učedníci u kotlíku ({approvedPlayers.length})</h3>
                             <span className="realtime-pill">Realtime</span>
                         </div>
 
@@ -551,7 +619,20 @@ export default function Lobby({ user, onLogout, showToast }) {
                                             {playerName}
                                             {isMe && <span className="player-me">(Ty)</span>}
                                         </span>
-                                        {p.is_guest && <span className="badge-guest">Host</span>}
+                                        <div className="player-item-meta">
+                                            {p.is_guest && <span className="badge-guest">Host</span>}
+                                            {isHost && !isMe && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleKickPlayer(p)}
+                                                    className="btn-kick"
+                                                    title={`Vykopnout hráče ${playerName}`}
+                                                    aria-label={`Vykopnout hráče ${playerName}`}
+                                                >
+                                                    ❌
+                                                </button>
+                                            )}
+                                        </div>
                                     </li>
                                 );
                             })}
