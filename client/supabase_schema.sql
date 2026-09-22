@@ -61,6 +61,10 @@ ALTER TABLE public.uzivatele ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.room_players ENABLE ROW LEVEL SECURITY;
 
+-- Povolení REPLICA IDENTITY FULL pro detailní Realtime DELETE payloady
+ALTER TABLE public.rooms REPLICA IDENTITY FULL;
+ALTER TABLE public.room_players REPLICA IDENTITY FULL;
+
 -- Politiky pro přístup z klientské aplikace (anon key)
 -- Uživatelé: čtení a zápis
 DROP POLICY IF EXISTS "Public select uzivatele" ON public.uzivatele;

@@ -70,6 +70,11 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
         isHostRef.current = isHost;
     }, [isHost]);
 
+    const roomCodeRef = useRef(roomCode);
+    useEffect(() => {
+        roomCodeRef.current = roomCode;
+    }, [roomCode]);
+
     const onLeaveRoomRef = useRef(onLeaveRoom);
     useEffect(() => {
         onLeaveRoomRef.current = onLeaveRoom;
@@ -102,14 +107,21 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
         // Načtení aktuálních hráčů z tabulky room_players
         const fetchPlayers = async () => {
             try {
+                const activeRoom = roomCodeRef.current || roomCode;
                 const { data, error } = await supabase
                     .from('room_players')
                     .select('*, uzivatele(prezdivka)')
-                    .eq('room_code', roomCode)
+                    .eq('room_code', activeRoom)
                     .order('joined_at', { ascending: true });
 
                 if (!isCancelled && !error && data) {
+                    playersRef.current = data;
                     setPlayers(data);
+
+                    const me = data.find((p) => Number(p.player_id) === Number(userRef.current?.id));
+                    if (me) {
+                        isHostRef.current = !!me.is_host;
+                    }
 
                     const approved = data.filter((p) => p.status === 'approved');
                     if (approved.length >= 2) {
@@ -161,7 +173,13 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                 const currentUserId = userRef.current?.id;
                 if (Number(key) === Number(currentUserId)) return; // Vlastní odpojení neřešíme
 
+                // Kontrola, zda hráč v players listu ještě vůbec fyzicky je.
+                // Pokud se už smazal z databáze (úmyslný odchod), Presence timeout se vůbec nesmí spustit!
                 const foundPlayer = playersRef.current.find((p) => String(p.player_id) === String(key));
+                if (!foundPlayer) {
+                    return;
+                }
+
                 const targetName = leftPresences?.[0]?.prezdivka || foundPlayer?.uzivatele?.prezdivka || 'Alchymista';
 
                 notifyRef.current?.(`Hráč ${targetName} má problémy s připojením. Čekáme 60 sekund...`, 'error');
@@ -209,14 +227,17 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                     addLogRef.current?.(`Časový limit pro hráče ${targetName} vypršel.`, 'system');
 
                     // Správné odstranění z databáze (Host logic):
-                    // Uvnitř setTimeout zkontrolovat, zda je aktuální klient stále správcem (is_host === true)
+                    // Uvnitř setTimeout použít if (isHostRef.current) a natvrdo zavolat:
+                    // await supabase.from('room_players').delete().eq('player_id', playerId).eq('room_code', currentRoom)
                     if (isHostRef.current) {
                         try {
+                            const playerId = Number(key);
+                            const currentRoom = roomCodeRef.current || roomCode;
                             await supabase
                                 .from('room_players')
                                 .delete()
-                                .eq('room_code', roomCode)
-                                .eq('player_id', Number(key));
+                                .eq('player_id', playerId)
+                                .eq('room_code', currentRoom);
                         } catch (err) {
                             console.error('Chyba při odstraňování odpojeného hráče:', err);
                         }
@@ -272,11 +293,78 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                 }
             })
 
-            // D) Realtime Postgres Changes: změny v tabulce room_players (připojení, odchod, kick)
+            // D) Realtime Postgres Changes: prioritní naslouchání na DELETE v tabulce room_players
             .on(
                 'postgres_changes',
                 {
-                    event: '*',
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'room_players',
+                    filter: `room_code=eq.${roomCode}`
+                },
+                (payload) => {
+                    const deletedId = payload.old?.id;
+                    const deletedPlayerId = payload.old?.player_id;
+
+                    // Najdeme hráče v lokálním seznamu
+                    const target = playersRef.current.find(
+                        (p) => (deletedId && Number(p.id) === Number(deletedId)) ||
+                               (deletedPlayerId && Number(p.player_id) === Number(deletedPlayerId))
+                    );
+
+                    const targetPlayerId = target ? target.player_id : deletedPlayerId;
+                    const playerIdKey = targetPlayerId ? String(targetPlayerId) : null;
+
+                    if (playerIdKey) {
+                        // 1. Zrušit jakýkoliv běžící Presence časovač
+                        if (disconnectTimers.current[playerIdKey]) {
+                            clearTimeout(disconnectTimers.current[playerIdKey]);
+                            delete disconnectTimers.current[playerIdKey];
+                        }
+                        if (disconnectIntervals.current[playerIdKey]) {
+                            clearInterval(disconnectIntervals.current[playerIdKey]);
+                            delete disconnectIntervals.current[playerIdKey];
+                        }
+                        setDisconnectedPlayers((prev) => {
+                            const copy = { ...prev };
+                            delete copy[playerIdKey];
+                            return copy;
+                        });
+                    }
+
+                    // 2. Okamžitě odstranit z lokálního stavu i synchronní reference
+                    playersRef.current = playersRef.current.filter((p) => {
+                        if (deletedId && Number(p.id) === Number(deletedId)) return false;
+                        if (playerIdKey && String(p.player_id) === playerIdKey) return false;
+                        return true;
+                    });
+                    setPlayers([...playersRef.current]);
+
+                    if (target) {
+                        const targetName = target.uzivatele?.prezdivka || 'Alchymista';
+                        addLogRef.current?.(`Hráč ${targetName} opustil laboratoř.`, 'system');
+                    }
+
+                    // 3. Spustit fetchPlayers pro synchronizaci a Last Player Standing
+                    fetchPlayers();
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'room_players',
+                    filter: `room_code=eq.${roomCode}`
+                },
+                () => {
+                    fetchPlayers();
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
                     schema: 'public',
                     table: 'room_players',
                     filter: `room_code=eq.${roomCode}`
