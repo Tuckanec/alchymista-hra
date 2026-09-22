@@ -32,20 +32,15 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
     // Sledování odpojených hráčů a jejich zbývajícího času { [playerId]: seconds }
     const [disconnectedPlayers, setDisconnectedPlayers] = useState({});
 
-    // Reference pro časovače odpojení { [playerId]: { timeoutId, intervalId } }
-    const disconnectTimersRef = useRef({});
+    // Reference pro časovače odpojení – přežijí i re-render komponenty
+    const disconnectTimers = useRef({});
+    const disconnectIntervals = useRef({});
 
     // Reference na Realtime kanál pro odesílání Broadcast zpráv
     const channelRef = useRef(null);
 
     // Příznak, zda hra někdy měla alespoň 2 hráče (pro Last Player Standing)
     const hasHadMultiplePlayersRef = useRef(initialPlayers.filter((p) => p.status === 'approved').length >= 2);
-
-    // Reference pro aktuální hráče (pro přístup v Presence handlerech)
-    const playersRef = useRef(players);
-    useEffect(() => {
-        playersRef.current = players;
-    }, [players]);
 
     // Zabraňuje opakovanému zrušení hry
     const isCancellingRef = useRef(false);
@@ -64,8 +59,40 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
         setLogs((prev) => [...prev, { id: Date.now() + Math.random(), text, type, time: timeStr }]);
     }, []);
 
+    // Stabilní reference pro hodnoty a callbacky (zabraňují znovuvytváření kanálu v useEffect)
+    const userRef = useRef(user);
+    useEffect(() => {
+        userRef.current = user;
+    }, [user]);
+
+    const isHostRef = useRef(isHost);
+    useEffect(() => {
+        isHostRef.current = isHost;
+    }, [isHost]);
+
+    const onLeaveRoomRef = useRef(onLeaveRoom);
+    useEffect(() => {
+        onLeaveRoomRef.current = onLeaveRoom;
+    }, [onLeaveRoom]);
+
+    const notifyRef = useRef(notify);
+    useEffect(() => {
+        notifyRef.current = notify;
+    }, [notify]);
+
+    const addLogRef = useRef(addLog);
+    useEffect(() => {
+        addLogRef.current = addLog;
+    }, [addLog]);
+
+    const playersRef = useRef(players);
+    useEffect(() => {
+        playersRef.current = players;
+    }, [players]);
+
     // =========================================================
     // 1. SUPABASE REALTIME: PRESENCE, BROADCAST A POSTGRES CHANGES
+    // Dependency array obsahuje POUZE stabilní hodnoty (roomCode, user?.id)
     // =========================================================
     useEffect(() => {
         if (!roomCode || !user?.id) return;
@@ -89,19 +116,27 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                         hasHadMultiplePlayersRef.current = true;
                     }
 
-                    // 3. Last Player Standing: Pokud zbyl pouze 1 hráč
+                    // 4. Zrušení prázdné laboratoře (Last Player Standing):
+                    // Pokud počet hráčů v místnosti klesne na 1 a tento jediný hráč je host,
+                    // místnost se odstraní z tabulky rooms a hráč je přesměrován do Lobby
                     if (hasHadMultiplePlayersRef.current && approved.length <= 1 && !isCancellingRef.current) {
-                        isCancellingRef.current = true;
-                        notify('Hra byla zrušena, všichni ostatní alchymisté utekli.', 'error');
+                        const remainingPlayer = approved[0];
+                        const isMe = remainingPlayer ? Number(remainingPlayer.player_id) === Number(userRef.current?.id) : false;
+                        const isRemainingHost = isHostRef.current || !!remainingPlayer?.is_host;
 
-                        try {
-                            await supabase.from('rooms').delete().eq('room_code', roomCode);
-                        } catch (err) {
-                            console.error('Chyba při mazání zrušené místnosti:', err);
-                        }
+                        if (isMe && isRemainingHost) {
+                            isCancellingRef.current = true;
+                            notifyRef.current?.('Hra byla zrušena, všichni ostatní alchymisté utekli.', 'error');
 
-                        if (onLeaveRoom) {
-                            onLeaveRoom(true);
+                            try {
+                                await supabase.from('rooms').delete().eq('room_code', roomCode);
+                            } catch (err) {
+                                console.error('Chyba při mazání prázdné laboratoře:', err);
+                            }
+
+                            if (onLeaveRoomRef.current) {
+                                onLeaveRoomRef.current(true);
+                            }
                         }
                     }
                 }
@@ -123,25 +158,30 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
         channel
             // A) Supabase Presence: odpojení hráče (leave)
             .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-                if (Number(key) === Number(user.id)) return; // Vlastní odpojení neřešíme
+                const currentUserId = userRef.current?.id;
+                if (Number(key) === Number(currentUserId)) return; // Vlastní odpojení neřešíme
 
                 const foundPlayer = playersRef.current.find((p) => String(p.player_id) === String(key));
                 const targetName = leftPresences?.[0]?.prezdivka || foundPlayer?.uzivatele?.prezdivka || 'Alchymista';
 
-                notify(`Hráč ${targetName} má problémy s připojením. Čekáme 60 sekund...`, 'error');
-                addLog(`Hráč ${targetName} se odpojil. Běží 60s limit pro návrat.`, 'system');
+                notifyRef.current?.(`Hráč ${targetName} má problémy s připojením. Čekáme 60 sekund...`, 'error');
+                addLogRef.current?.(`Hráč ${targetName} se odpojil. Běží 60s limit pro návrat.`, 'system');
 
-                // Nastavíme odpočet na 60s
+                // Nastavíme odpočet na 60s v UI
                 setDisconnectedPlayers((prev) => ({ ...prev, [key]: 60 }));
 
-                // Pokud již existuje starý časovač pro tohoto hráče, smažeme ho
-                if (disconnectTimersRef.current[key]) {
-                    clearTimeout(disconnectTimersRef.current[key].timeoutId);
-                    clearInterval(disconnectTimersRef.current[key].intervalId);
+                // Pokud již pro hráče běžel časovač, vyčistit ho před novým startem
+                if (disconnectTimers.current[key]) {
+                    clearTimeout(disconnectTimers.current[key]);
+                    delete disconnectTimers.current[key];
+                }
+                if (disconnectIntervals.current[key]) {
+                    clearInterval(disconnectIntervals.current[key]);
+                    delete disconnectIntervals.current[key];
                 }
 
-                // Interval pro odpočet každou sekundu v UI
-                const intervalId = setInterval(() => {
+                // Vteřinový interval pro plynulý UI odpočet
+                disconnectIntervals.current[key] = setInterval(() => {
                     setDisconnectedPlayers((prev) => {
                         const currentVal = prev[key];
                         if (currentVal === undefined) return prev;
@@ -152,42 +192,52 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                     });
                 }, 1000);
 
-                // Timeout na 60000 ms (60 sekund)
-                const timeoutId = setTimeout(async () => {
-                    clearInterval(intervalId);
-                    delete disconnectTimersRef.current[key];
+                // Timeout na 60 sekund uložený v useRef
+                disconnectTimers.current[key] = setTimeout(async () => {
+                    if (disconnectIntervals.current[key]) {
+                        clearInterval(disconnectIntervals.current[key]);
+                        delete disconnectIntervals.current[key];
+                    }
+                    delete disconnectTimers.current[key];
+
                     setDisconnectedPlayers((prev) => {
                         const copy = { ...prev };
                         delete copy[key];
                         return copy;
                     });
 
-                    addLog(`Časový limit pro hráče ${targetName} vypršel.`, 'system');
+                    addLogRef.current?.(`Časový limit pro hráče ${targetName} vypršel.`, 'system');
 
-                    // Definitivní vyhození odpojeného hráče z room_players po 60s
-                    try {
-                        await supabase
-                            .from('room_players')
-                            .delete()
-                            .eq('room_code', roomCode)
-                            .eq('player_id', Number(key));
-                    } catch (err) {
-                        console.error('Chyba při odstraňování odpojeného hráče:', err);
+                    // Správné odstranění z databáze (Host logic):
+                    // Uvnitř setTimeout zkontrolovat, zda je aktuální klient stále správcem (is_host === true)
+                    if (isHostRef.current) {
+                        try {
+                            await supabase
+                                .from('room_players')
+                                .delete()
+                                .eq('room_code', roomCode)
+                                .eq('player_id', Number(key));
+                        } catch (err) {
+                            console.error('Chyba při odstraňování odpojeného hráče:', err);
+                        }
                     }
                 }, 60000);
-
-                disconnectTimersRef.current[key] = { timeoutId, intervalId };
             })
 
             // B) Supabase Presence: návrat hráče (join)
             .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-                if (Number(key) === Number(user.id)) return;
+                const currentUserId = userRef.current?.id;
+                if (Number(key) === Number(currentUserId)) return;
 
-                // Pokud pro tohoto hráče běžel 60s timeout, zrušíme ho
-                if (disconnectTimersRef.current[key]) {
-                    clearTimeout(disconnectTimersRef.current[key].timeoutId);
-                    clearInterval(disconnectTimersRef.current[key].intervalId);
-                    delete disconnectTimersRef.current[key];
+                // Když přijde join, zavolat clearTimeout a smazat časovač z useRef
+                if (disconnectTimers.current[key]) {
+                    clearTimeout(disconnectTimers.current[key]);
+                    delete disconnectTimers.current[key];
+
+                    if (disconnectIntervals.current[key]) {
+                        clearInterval(disconnectIntervals.current[key]);
+                        delete disconnectIntervals.current[key];
+                    }
 
                     setDisconnectedPlayers((prev) => {
                         const copy = { ...prev };
@@ -197,8 +247,8 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
 
                     const foundPlayer = playersRef.current.find((p) => String(p.player_id) === String(key));
                     const targetName = newPresences?.[0]?.prezdivka || foundPlayer?.uzivatele?.prezdivka || 'Alchymista';
-                    notify(`Hráč ${targetName} je zpět!`, 'success');
-                    addLog(`Hráč ${targetName} se vrátil zpět do laboratoře.`, 'system');
+                    notifyRef.current?.(`Hráč ${targetName} je zpět!`, 'success');
+                    addLogRef.current?.(`Hráč ${targetName} se vrátil zpět do laboratoře.`, 'system');
                 }
             })
 
@@ -209,15 +259,15 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                 if (payload.action === 'CARD_PLAYED') {
                     // Přidání zahrané karty do kotlíku
                     setCauldronIngredients((prev) => [...prev, payload.card]);
-                    addLog(`${payload.playerName} vhodil do kotlíku: ${payload.card.name}.`);
+                    addLogRef.current?.(`${payload.playerName} vhodil do kotlíku: ${payload.card.name}.`);
                 } else if (payload.action === 'END_TURN') {
                     // Střídání tahu
                     setActiveTurnId(payload.activeTurnId);
-                    addLog(`${payload.playerName} ukončil svůj tah.`, 'turn');
-                    addLog(`Na tahu je: ${payload.nextPlayerName}.`, 'turn');
+                    addLogRef.current?.(`${payload.playerName} ukončil svůj tah.`, 'turn');
+                    addLogRef.current?.(`Na tahu je: ${payload.nextPlayerName}.`, 'turn');
 
-                    if (Number(payload.activeTurnId) === Number(user.id)) {
-                        notify('Jsi na tahu!', 'info');
+                    if (Number(payload.activeTurnId) === Number(userRef.current?.id)) {
+                        notifyRef.current?.('Jsi na tahu!', 'info');
                     }
                 }
             })
@@ -248,9 +298,9 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                 () => {
                     if (!isCancellingRef.current) {
                         isCancellingRef.current = true;
-                        notify('Hra byla zrušena, všichni ostatní alchymisté utekli.', 'error');
-                        if (onLeaveRoom) {
-                            onLeaveRoom(true);
+                        notifyRef.current?.('Hra byla zrušena, všichni ostatní alchymisté utekli.', 'error');
+                        if (onLeaveRoomRef.current) {
+                            onLeaveRoomRef.current(true);
                         }
                     }
                 }
@@ -260,8 +310,8 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
             .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
                     await channel.track({
-                        player_id: Number(user.id),
-                        prezdivka: user.prezdivka,
+                        player_id: Number(userRef.current?.id || user?.id),
+                        prezdivka: userRef.current?.prezdivka || 'Alchymista',
                         online_at: new Date().toISOString()
                     });
                 }
@@ -272,14 +322,13 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
         // Vyčištění při unmountu komponenty
         return () => {
             isCancelled = true;
-            Object.values(disconnectTimersRef.current).forEach(({ timeoutId, intervalId }) => {
-                clearTimeout(timeoutId);
-                clearInterval(intervalId);
-            });
-            disconnectTimersRef.current = {};
+            Object.values(disconnectTimers.current).forEach(clearTimeout);
+            Object.values(disconnectIntervals.current).forEach(clearInterval);
+            disconnectTimers.current = {};
+            disconnectIntervals.current = {};
             supabase.removeChannel(channel);
         };
-    }, [roomCode, user.id, user.prezdivka, isHost, notify, addLog, onLeaveRoom]);
+    }, [roomCode, user?.id]);
 
     const isMyTurn = Number(activeTurnId) === Number(user.id);
     const opponents = players.filter((p) => Number(p.player_id) !== Number(user.id));
