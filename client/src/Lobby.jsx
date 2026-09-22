@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import './Lobby.css';
 
@@ -6,69 +6,74 @@ export default function Lobby({ user, onLogout, showToast }) {
     const [joinCode, setJoinCode] = useState('');
     const [currentRoom, setCurrentRoom] = useState(null);
     const [isHost, setIsHost] = useState(false);
+    const [myPlayerStatus, setMyPlayerStatus] = useState(null); // 'pending' | 'approved' | null
     const [players, setPlayers] = useState([]);
+    const [activeRooms, setActiveRooms] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Sekce skóre (Síň slávy)
-    const [showScores, setShowScores] = useState(false);
-    const [leaderboard, setLeaderboard] = useState([]);
-    const [submittingScore, setSubmittingScore] = useState(false);
+    // Reference pro předcházení duplicitním notifikacím o schválení
+    const prevStatusRef = useRef(null);
 
-    const notify = (msg, type = 'info') => {
+    const notify = useCallback((msg, type = 'info') => {
         if (showToast) {
             showToast(msg, type);
         } else {
             console.log(`[Toast ${type}]:`, msg);
         }
-    };
+    }, [showToast]);
 
-    // 1. Načtení žebříčku a realtime odběr změn v tabulce 'skore'
+    // =========================================================
+    // 1. NAČTENÍ AKTIVNÍCH LABORATOŘÍ A REALTIME ODBĚR 'rooms'
+    // =========================================================
     useEffect(() => {
         let isCancelled = false;
 
-        const loadScores = async () => {
+        const fetchRooms = async () => {
             try {
                 const { data, error } = await supabase
-                    .from('skore')
+                    .from('rooms')
                     .select('*')
-                    .order('body', { ascending: false })
-                    .limit(10);
+                    .order('created_at', { ascending: false });
 
                 if (!isCancelled && !error && data) {
-                    setLeaderboard(data);
+                    setActiveRooms(data);
                 }
             } catch (err) {
-                console.error('Chyba spojení se Supabase:', err);
+                console.error('Chyba při načítání laboratoří:', err);
             }
         };
 
-        loadScores();
+        fetchRooms();
 
-        // Realtime odběr změn skóre
-        const scoreChannel = supabase
-            .channel('realtime_skore')
+        const roomsChannel = supabase
+            .channel('realtime_active_rooms')
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'skore' },
+                { event: '*', schema: 'public', table: 'rooms' },
                 () => {
-                    loadScores();
+                    fetchRooms();
                 }
             )
             .subscribe();
 
         return () => {
             isCancelled = true;
-            supabase.removeChannel(scoreChannel);
+            supabase.removeChannel(roomsChannel);
         };
     }, []);
 
-    // 2. SUPABASE REALTIME SUBSCRIPTION PRO HRÁČE V MÍSTNOSTI
+    // =========================================================
+    // 2. REALTIME ODBĚR HRÁČŮ PRO AKTUÁLNÍ MÍSTNOST
+    // =========================================================
     useEffect(() => {
-        if (!currentRoom) return;
+        if (!currentRoom) {
+            prevStatusRef.current = null;
+            return;
+        }
 
         let isCancelled = false;
 
-        const loadRoomPlayers = async () => {
+        const fetchPlayers = async () => {
             try {
                 const { data, error } = await supabase
                     .from('room_players')
@@ -76,30 +81,58 @@ export default function Lobby({ user, onLogout, showToast }) {
                     .eq('room_code', currentRoom)
                     .order('joined_at', { ascending: true });
 
-                if (!isCancelled && !error && data) {
+                if (error) {
+                    console.error('Chyba při načítání hráčů:', error);
+                    return;
+                }
+
+                if (!isCancelled && data) {
                     setPlayers(data);
+
+                    // Zjistíme stav přihlášeného hráče
+                    const me = data.find((p) => String(p.player_id) === String(user.id));
+                    if (me) {
+                        setIsHost(!!me.is_host);
+
+                        // Notifikace při změně ze stavu 'pending' na 'approved'
+                        if (prevStatusRef.current === 'pending' && me.status === 'approved') {
+                            notify('Tvoje žádost byla schválena! Vítej v laboratoři.', 'success');
+                        }
+                        prevStatusRef.current = me.status;
+                        setMyPlayerStatus(me.status);
+                    } else {
+                        // Hráč v místnosti již neexistuje (byl odmítnut nebo odebrán)
+                        if (prevStatusRef.current === 'pending') {
+                            notify('Správce zamítl tvoji žádost o vstup do laboratoře.', 'error');
+                        } else if (prevStatusRef.current === 'approved') {
+                            notify('Byl jsi odebrán z laboratoře nebo byla místnost zrušena.', 'info');
+                        }
+                        prevStatusRef.current = null;
+                        setCurrentRoom(null);
+                        setPlayers([]);
+                        setIsHost(false);
+                        setMyPlayerStatus(null);
+                    }
                 }
             } catch (err) {
-                console.error('Chyba při načítání hráčů z laboratoře:', err);
+                console.error('Chyba při komunikaci se Supabase:', err);
             }
         };
 
-        loadRoomPlayers();
+        fetchPlayers();
 
-        // Odběr Realtime změn v tabulce 'room_players' pro danou místnost
         const roomChannel = supabase
             .channel(`room_${currentRoom}`)
             .on(
                 'postgres_changes',
                 {
-                    event: '*', // INSERT, UPDATE, DELETE
+                    event: '*',
                     schema: 'public',
                     table: 'room_players',
                     filter: `room_code=eq.${currentRoom}`
                 },
-                (payload) => {
-                    console.log('⚡ Supabase Realtime změna:', payload);
-                    loadRoomPlayers();
+                () => {
+                    fetchPlayers();
                 }
             )
             .subscribe();
@@ -108,15 +141,17 @@ export default function Lobby({ user, onLogout, showToast }) {
             isCancelled = true;
             supabase.removeChannel(roomChannel);
         };
-    }, [currentRoom]);
+    }, [currentRoom, user.id, notify]);
 
-    // Založení nové laboratoře (místnosti)
+    // =========================================================
+    // 3. ZALOŽENÍ NOVÉ LABORATOŘE
+    // =========================================================
     const handleCreateRoom = async () => {
         setLoading(true);
         try {
             const newCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
-            // 1. Vložíme místnost do tabulky 'rooms'
+            // 1. Vložení místnosti do tabulky 'rooms'
             const { error: roomError } = await supabase
                 .from('rooms')
                 .insert([
@@ -134,7 +169,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                 return;
             }
 
-            // 2. Vložíme zakladatele jako prvního hráče do 'room_players'
+            // 2. Vložení zakladatele jako schváleného správce (is_host: true, status: 'approved')
             const { error: playerError } = await supabase
                 .from('room_players')
                 .insert([
@@ -143,7 +178,8 @@ export default function Lobby({ user, onLogout, showToast }) {
                         player_id: String(user.id),
                         prezdivka: user.prezdivka,
                         is_guest: !!user.isGuest,
-                        is_host: true
+                        is_host: true,
+                        status: 'approved'
                     }
                 ]);
 
@@ -153,9 +189,11 @@ export default function Lobby({ user, onLogout, showToast }) {
                 return;
             }
 
-            setCurrentRoom(newCode);
+            prevStatusRef.current = 'approved';
+            setMyPlayerStatus('approved');
             setIsHost(true);
-            notify(`Laboratoř ${newCode} byla vytvořena.`, 'success');
+            setCurrentRoom(newCode);
+            notify(`Laboratoř ${newCode} byla úspěšně vytvořena.`, 'success');
         } catch (err) {
             console.error('Neočekávaná chyba při tvorbě místnosti:', err);
             notify('Chyba spojení se Supabase.', 'error');
@@ -164,15 +202,16 @@ export default function Lobby({ user, onLogout, showToast }) {
         }
     };
 
-    // Připojení k existující laboratoři
-    const handleJoinRoom = async (e) => {
-        e.preventDefault();
-        const code = joinCode.trim().toUpperCase();
+    // =========================================================
+    // 4. PŘIPOJENÍ / ŽÁDOST O VSTUP DO LABORATOŘE
+    // =========================================================
+    const joinLaboratoryByCode = async (targetCode) => {
+        const code = targetCode.trim().toUpperCase();
         if (!code) return;
 
         setLoading(true);
         try {
-            // 1. Ověříme existenci místnosti v Supabase
+            // 1. Ověření existence místnosti
             const { data: room, error: roomError } = await supabase
                 .from('rooms')
                 .select('*')
@@ -180,131 +219,325 @@ export default function Lobby({ user, onLogout, showToast }) {
                 .maybeSingle();
 
             if (roomError) {
-                console.error('Chyba vyhledání místnosti:', roomError);
-                notify('Chyba při vyhledávání: ' + roomError.message, 'error');
+                console.error('Chyba při vyhledání místnosti:', roomError);
+                notify('Chyba vyhledávání: ' + roomError.message, 'error');
                 return;
             }
 
             if (!room) {
-                notify('Tato laboratoř neexistuje nebo byla zrušena.', 'error');
+                notify('Tato laboratoř neexistuje nebo již byla zrušena.', 'error');
                 return;
             }
 
-            // 2. Zkontrolujeme, zda hráč už v místnosti není
-            const { data: existing } = await supabase
+            // 2. Kontrola, zda hráč již v místnosti není
+            const { data: existing, error: existingError } = await supabase
                 .from('room_players')
-                .select('id')
+                .select('*')
                 .eq('room_code', code)
                 .eq('player_id', String(user.id))
                 .maybeSingle();
 
-            if (!existing) {
-                const { error: joinError } = await supabase
-                    .from('room_players')
-                    .insert([
-                        {
-                            room_code: code,
-                            player_id: String(user.id),
-                            prezdivka: user.prezdivka,
-                            is_guest: !!user.isGuest,
-                            is_host: room.host_id === String(user.id)
-                        }
-                    ]);
-
-                if (joinError) {
-                    console.error('Chyba při připojování:', joinError);
-                    notify('Nepodařilo se připojit: ' + joinError.message, 'error');
-                    return;
-                }
+            if (existingError) {
+                console.error('Chyba při kontrole hráče:', existingError);
             }
 
+            if (existing) {
+                // Hráč už záznam má, použijeme existující stav
+                prevStatusRef.current = existing.status;
+                setMyPlayerStatus(existing.status);
+                setIsHost(!!existing.is_host);
+                setCurrentRoom(code);
+                setJoinCode('');
+                if (existing.status === 'approved') {
+                    notify(`Vstup do laboratoře ${code}.`, 'success');
+                } else {
+                    notify(`Čekáš na schválení do laboratoře ${code}.`, 'info');
+                }
+                return;
+            }
+
+            // Pokud je hráč původní zakladatel místnosti podle rooms tabulky, rovnou approved host
+            const isOriginalHost = String(room.host_id) === String(user.id);
+            const initialStatus = isOriginalHost ? 'approved' : 'pending';
+
+            const { error: joinError } = await supabase
+                .from('room_players')
+                .insert([
+                    {
+                        room_code: code,
+                        player_id: String(user.id),
+                        prezdivka: user.prezdivka,
+                        is_guest: !!user.isGuest,
+                        is_host: isOriginalHost,
+                        status: initialStatus
+                    }
+                ]);
+
+            if (joinError) {
+                console.error('Chyba při žádosti o připojení:', joinError);
+                notify('Nepodařilo se odeslat žádost: ' + joinError.message, 'error');
+                return;
+            }
+
+            prevStatusRef.current = initialStatus;
+            setMyPlayerStatus(initialStatus);
+            setIsHost(isOriginalHost);
             setCurrentRoom(code);
-            setIsHost(room.host_id === String(user.id));
             setJoinCode('');
-            notify(`Připojeno do laboratoře ${code}.`, 'success');
+
+            if (initialStatus === 'approved') {
+                notify(`Vstup do laboratoře ${code}.`, 'success');
+            } else {
+                notify(`Žádost o vstup do laboratoře ${code} byla odeslána.`, 'info');
+            }
         } catch (err) {
-            console.error('Neočekávaná chyba připojení:', err);
+            console.error('Neočekávaná chyba při vstupu:', err);
             notify('Chyba spojení se Supabase.', 'error');
         } finally {
             setLoading(false);
         }
     };
 
-    // Opuštění laboratoře
+    const handleJoinFormSubmit = (e) => {
+        e.preventDefault();
+        joinLaboratoryByCode(joinCode);
+    };
+
+    // =========================================================
+    // 5. SCHVALOVÁNÍ A ODMÍTÁNÍ ŽÁDOSTÍ (HOST ACTIONS)
+    // =========================================================
+    const handleApprovePlayer = async (targetPlayer) => {
+        try {
+            const { error } = await supabase
+                .from('room_players')
+                .update({ status: 'approved' })
+                .eq('id', targetPlayer.id);
+
+            if (error) {
+                notify('Chyba při schvalování: ' + error.message, 'error');
+            } else {
+                notify(`Učedník ${targetPlayer.prezdivka} byl schválen.`, 'success');
+            }
+        } catch (err) {
+            console.error('Chyba při schvalování:', err);
+        }
+    };
+
+    const handleRejectPlayer = async (targetPlayer) => {
+        try {
+            const { error } = await supabase
+                .from('room_players')
+                .delete()
+                .eq('id', targetPlayer.id);
+
+            if (error) {
+                notify('Chyba při zamítnutí: ' + error.message, 'error');
+            } else {
+                notify(`Žádost hráče ${targetPlayer.prezdivka} byla zamítnuta.`, 'info');
+            }
+        } catch (err) {
+            console.error('Chyba při zamítnutí:', err);
+        }
+    };
+
+    // =========================================================
+    // 6. OPUŠTĚNÍ LABORATOŘE & PŘEDÁVÁNÍ SPRÁVCOVSTVÍ (HOST TRANSFER)
+    // =========================================================
     const handleLeaveRoom = async () => {
         if (!currentRoom) return;
 
         try {
-            await supabase
+            // 1. Zjistíme ostatní hráče v této laboratoři
+            const { data: otherPlayers, error: fetchErr } = await supabase
                 .from('room_players')
-                .delete()
+                .select('*')
                 .eq('room_code', currentRoom)
-                .eq('player_id', String(user.id));
+                .neq('player_id', String(user.id))
+                .order('joined_at', { ascending: true });
+
+            if (fetchErr) {
+                console.error('Chyba při zjišťování hráčů:', fetchErr);
+            }
+
+            const remaining = otherPlayers || [];
 
             if (isHost) {
+                if (remaining.length > 0) {
+                    // Najdeme nejstaršího 'approved' hráče (pokud žádný approved není, vezmeme nejstaršího)
+                    const nextHost = remaining.find((p) => p.status === 'approved') || remaining[0];
+
+                    // Povýšíme hráče na hosta (a schválíme ho)
+                    await supabase
+                        .from('room_players')
+                        .update({ is_host: true, status: 'approved' })
+                        .eq('id', nextHost.id);
+
+                    // Aktualizujeme záznam v tabulce 'rooms'
+                    await supabase
+                        .from('rooms')
+                        .update({ host_id: nextHost.player_id, host_name: nextHost.prezdivka })
+                        .eq('room_code', currentRoom);
+
+                    // Smažeme odcházejícího hosta
+                    await supabase
+                        .from('room_players')
+                        .delete()
+                        .eq('room_code', currentRoom)
+                        .eq('player_id', String(user.id));
+                } else {
+                    // V místnosti nezůstal nikdo -> smažeme hráče i celou místnost z rooms
+                    await supabase
+                        .from('room_players')
+                        .delete()
+                        .eq('room_code', currentRoom)
+                        .eq('player_id', String(user.id));
+
+                    await supabase
+                        .from('rooms')
+                        .delete()
+                        .eq('room_code', currentRoom);
+                }
+            } else {
+                // Běžný hráč (nebo čekající žádost)
                 await supabase
-                    .from('rooms')
+                    .from('room_players')
                     .delete()
-                    .eq('room_code', currentRoom);
+                    .eq('room_code', currentRoom)
+                    .eq('player_id', String(user.id));
+
+                // Pokud byl poslední hráč v místnosti, místnost také smažeme
+                if (remaining.length === 0) {
+                    await supabase
+                        .from('rooms')
+                        .delete()
+                        .eq('room_code', currentRoom);
+                }
             }
+
             notify('Laboratoř opuštěna.', 'info');
         } catch (err) {
-            console.error('Chyba při opuštění místnosti:', err);
+            console.error('Chyba při opouštění místnosti:', err);
         } finally {
+            prevStatusRef.current = null;
             setCurrentRoom(null);
             setPlayers([]);
             setIsHost(false);
+            setMyPlayerStatus(null);
         }
     };
 
-    // Uložení testovacího skóre do tabulky skore
-    const handleSaveSampleScore = async () => {
-        setSubmittingScore(true);
-        try {
-            const nahodneBody = Math.floor(Math.random() * 250) + 50;
-            const { error } = await supabase
-                .from('skore')
-                .insert([
-                    {
-                        prezdivka: user.prezdivka,
-                        body: nahodneBody
-                    }
-                ]);
-
-            if (error) {
-                notify('Chyba při ukládání skóre: ' + error.message, 'error');
-            } else {
-                notify(`Zapsáno ${nahodneBody} bodů do Síně slávy!`, 'success');
-            }
-        } catch (err) {
-            console.error('Chyba skóre:', err);
-            notify('Chyba při zápisu skóre.', 'error');
-        } finally {
-            setSubmittingScore(false);
+    const handleLogoutClick = async () => {
+        if (currentRoom) {
+            await handleLeaveRoom();
+        }
+        if (onLogout) {
+            onLogout();
         }
     };
 
-    // UI pro čekárnu (Waiting Room v laboratoři)
-    if (currentRoom) {
+    // Filtrovaní hráči pro zobrazení
+    const approvedPlayers = players.filter((p) => p.status === 'approved');
+    const pendingPlayers = players.filter((p) => p.status === 'pending');
+
+    // =========================================================
+    // UI: ČEKÁRNA PRO NEZCHVÁLENÉHO UČEDNÍKA (PENDING SCREEN)
+    // =========================================================
+    if (currentRoom && myPlayerStatus === 'pending') {
         return (
             <div className="lobby-wrapper">
                 <div className="lobby-card">
                     <div className="room-header">
-                        <div style={{ fontSize: '13px', color: '#9ca3af' }}>Kód laboratoře</div>
+                        <div className="room-status-badge pending-badge">Čekání na schválení</div>
                         <div className="room-code-tag">{currentRoom}</div>
-                        <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#9ca3af' }}>
-                            Sdílej tento kód s ostatními hráči
+                        <h3 className="pending-title">Čekám na schválení správcem...</h3>
+                        <p className="pending-desc">
+                            Správce laboratoře obdržel tvoji žádost. Vyčkej, dokud ti neodemkne vstup k alchymistickému stolu.
                         </p>
                     </div>
 
+                    <div className="room-actions">
+                        <button 
+                            type="button" 
+                            onClick={handleLeaveRoom}
+                            className="btn-leave"
+                        >
+                            Zrušit žádost
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // =========================================================
+    // UI: VNITŘEK LABORATOŘE (SCHVÁLENÝ HRÁČ / SPRÁVCE)
+    // =========================================================
+    if (currentRoom && myPlayerStatus === 'approved') {
+        return (
+            <div className="lobby-wrapper">
+                <div className="lobby-card">
+                    <div className="room-header">
+                        <div className="room-code-label">Kód laboratoře</div>
+                        <div className="room-code-tag">{currentRoom}</div>
+                        <p className="room-share-hint">
+                            Sdílej tento kód s ostatními učedníky
+                        </p>
+                    </div>
+
+                    {/* Sekce čekajících učedníků pro hosta */}
+                    {isHost && (
+                        <div className="room-pending-box">
+                            <div className="room-players-header">
+                                <h3>Čekající učedníci ({pendingPlayers.length})</h3>
+                                {pendingPlayers.length > 0 && (
+                                    <span className="badge-pending-count">Žádosti</span>
+                                )}
+                            </div>
+
+                            {pendingPlayers.length === 0 ? (
+                                <p className="empty-subtext">Žádné nevyřízené žádosti o vstup.</p>
+                            ) : (
+                                <ul className="pending-list">
+                                    {pendingPlayers.map((p) => (
+                                        <li key={p.id} className="pending-item">
+                                            <div className="pending-item-info">
+                                                <span className="pending-name">{p.prezdivka}</span>
+                                                {p.is_guest && <span className="badge-guest">Host</span>}
+                                            </div>
+                                            <div className="pending-item-actions">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleApprovePlayer(p)}
+                                                    className="btn-approve"
+                                                    title="Povolit vstup"
+                                                >
+                                                    Schválit
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRejectPlayer(p)}
+                                                    className="btn-reject"
+                                                    title="Odmítnout žádost"
+                                                >
+                                                    Odmítnout
+                                                </button>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Schválení alchymisté v místnosti */}
                     <div className="room-players-box">
                         <div className="room-players-header">
-                            <h3>Připojení hráči ({players.length})</h3>
+                            <h3>Schválení alchymisté ({approvedPlayers.length})</h3>
                             <span className="realtime-pill">Realtime</span>
                         </div>
 
                         <ul className="player-list">
-                            {players.map((p) => {
+                            {approvedPlayers.map((p) => {
                                 const isMe = String(p.player_id) === String(user.id);
                                 return (
                                     <li key={p.id || p.player_id} className="player-item">
@@ -325,17 +558,8 @@ export default function Lobby({ user, onLogout, showToast }) {
                     </div>
 
                     <div className="room-actions">
-                        <button
-                            type="button"
-                            onClick={handleSaveSampleScore}
-                            disabled={submittingScore}
-                            className="btn-secondary"
-                        >
-                            {submittingScore ? 'Zapisuji...' : 'Zapsat body'}
-                        </button>
-
                         <button 
-                            type="button"
+                            type="button" 
                             onClick={handleLeaveRoom}
                             className="btn-leave"
                         >
@@ -347,7 +571,9 @@ export default function Lobby({ user, onLogout, showToast }) {
         );
     }
 
-    // UI pro výběr akce (Lobby menu)
+    // =========================================================
+    // UI: HLAVNÍ NABÍDKA LOBBY (VÝBĚR MÍSTNOSTI / ZALOŽENÍ)
+    // =========================================================
     return (
         <div className="lobby-wrapper">
             <div className="lobby-topbar">
@@ -360,7 +586,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                 {onLogout && (
                     <button 
                         type="button"
-                        onClick={onLogout}
+                        onClick={handleLogoutClick}
                         className="btn-logout"
                     >
                         Odhlásit se
@@ -370,7 +596,7 @@ export default function Lobby({ user, onLogout, showToast }) {
 
             <div className="lobby-card">
                 <h2 className="lobby-title">Alchymistická dílna</h2>
-                <p className="lobby-subtitle">Založ novou laboratoř nebo se připoj ke hře pomocí PIN kódu.</p>
+                <p className="lobby-subtitle">Vyber si aktivní laboratoř ze seznamu, zadej PIN nebo založ novou.</p>
 
                 <button 
                     type="button"
@@ -382,7 +608,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                 </button>
 
                 <div className="join-section">
-                    <form onSubmit={handleJoinRoom} className="join-form">
+                    <form onSubmit={handleJoinFormSubmit} className="join-form">
                         <input 
                             type="text" 
                             placeholder="PIN KÓD" 
@@ -403,44 +629,36 @@ export default function Lobby({ user, onLogout, showToast }) {
                     </form>
                 </div>
 
-                <div className="leaderboard-section">
-                    <button
-                        type="button"
-                        onClick={() => setShowScores(!showScores)}
-                        className="leaderboard-toggle-btn"
-                    >
-                        {showScores ? '▲ Skrýt Síň slávy' : '▼ Zobrazit Síň slávy'}
-                    </button>
+                {/* Seznam aktivních laboratoří v reálném čase */}
+                <div className="active-rooms-section">
+                    <div className="active-rooms-header">
+                        <h3>Aktivní laboratoře ({activeRooms.length})</h3>
+                        <span className="realtime-pill">Live</span>
+                    </div>
 
-                    {showScores && (
-                        <div className="leaderboard-card">
-                            <h4>Nejlepší alchymisté</h4>
-                            {leaderboard.length === 0 ? (
-                                <p style={{ fontSize: '13px', color: '#9ca3af', margin: 0 }}>
-                                    Zatím žádné záznamy.
-                                </p>
-                            ) : (
-                                <ul className="leaderboard-list">
-                                    {leaderboard.map((item, index) => (
-                                        <li key={item.id || index} className="leaderboard-item">
-                                            <span>{index + 1}. {item.prezdivka}</span>
-                                            <span className="leaderboard-score">{item.body} b.</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                            <div style={{ marginTop: '12px', textAlign: 'right' }}>
-                                <button
-                                    type="button"
-                                    onClick={handleSaveSampleScore}
-                                    disabled={submittingScore}
-                                    className="btn-secondary"
-                                    style={{ fontSize: '12px', padding: '6px 12px' }}
-                                >
-                                    {submittingScore ? 'Zapisuji...' : 'Zapsat body'}
-                                </button>
-                            </div>
-                        </div>
+                    {activeRooms.length === 0 ? (
+                        <p className="empty-rooms-text">Aktuálně není otevřena žádná laboratoř. Buď první!</p>
+                    ) : (
+                        <ul className="active-rooms-list">
+                            {activeRooms.map((room) => (
+                                <li key={room.id || room.room_code} className="active-room-item">
+                                    <div className="active-room-info">
+                                        <div className="active-room-code">{room.room_code}</div>
+                                        <div className="active-room-host">
+                                            Správce: <strong>{room.host_name}</strong>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        disabled={loading}
+                                        onClick={() => joinLaboratoryByCode(room.room_code)}
+                                        className="btn-room-enter"
+                                    >
+                                        Požádat o vstup
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
                     )}
                 </div>
             </div>

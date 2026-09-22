@@ -71,6 +71,7 @@
     margin: 0 0 24px 0;
     font-size: 13px;
     color: #9ca3af;
+    line-height: 1.4;
 }
 
 .btn-create-room {
@@ -148,9 +149,146 @@
     cursor: not-allowed;
 }
 
-/* Room waiting screen */
+/* ========================================================= */
+/* Live seznam aktivních laboratoří                           */
+/* ========================================================= */
+.active-rooms-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #242632;
+    text-align: left;
+}
+
+.active-rooms-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.active-rooms-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #e5e7eb;
+}
+
+.empty-rooms-text {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 12px 0;
+    text-align: center;
+}
+
+.active-rooms-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.active-room-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #121318;
+    border: 1px solid #242632;
+    border-radius: 6px;
+    padding: 10px 14px;
+    transition: border-color 0.15s ease;
+}
+
+.active-room-item:hover {
+    border-color: #323544;
+}
+
+.active-room-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.active-room-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #10b981;
+}
+
+.active-room-host {
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.active-room-host strong {
+    color: #d1d5db;
+}
+
+.btn-room-enter {
+    padding: 7px 13px;
+    background: #20222c;
+    border: 1px solid #2d2f3b;
+    color: #f3f4f6;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn-room-enter:hover:not(:disabled) {
+    background: #10b981;
+    border-color: #10b981;
+    color: #ffffff;
+}
+
+/* ========================================================= */
+/* Obrazovka čekárny na schválení (Pending screen)           */
+/* ========================================================= */
+.room-status-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+}
+
+.pending-badge {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: #f59e0b;
+}
+
+.pending-title {
+    margin: 16px 0 8px 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: #f3f4f6;
+}
+
+.pending-desc {
+    font-size: 13px;
+    color: #9ca3af;
+    line-height: 1.5;
+    margin: 0 auto;
+    max-width: 360px;
+}
+
+/* ========================================================= */
+/* Vnitřek laboratoře (Room screen)                          */
+/* ========================================================= */
 .room-header {
     margin-bottom: 20px;
+}
+
+.room-code-label {
+    font-size: 13px;
+    color: #9ca3af;
 }
 
 .room-code-tag {
@@ -164,15 +302,117 @@
     border: 1px solid #282a36;
     padding: 8px 18px;
     border-radius: 6px;
-    margin: 12px 0 6px 0;
+    margin: 8px 0 6px 0;
 }
 
+.room-share-hint {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+/* Sekce žádostí pro správce */
+.room-pending-box {
+    background: #15161e;
+    border: 1px solid #323544;
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin: 16px 0;
+    text-align: left;
+}
+
+.badge-pending-count {
+    font-size: 11px;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    padding: 2px 7px;
+    border-radius: 10px;
+}
+
+.empty-subtext {
+    font-size: 12px;
+    color: #6b7280;
+    margin: 4px 0 0 0;
+}
+
+.pending-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pending-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #121318;
+    border: 1px solid #242632;
+    border-radius: 5px;
+    padding: 8px 10px;
+}
+
+.pending-item-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pending-name {
+    font-size: 13px;
+    color: #e5e7eb;
+    font-weight: 500;
+}
+
+.pending-item-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-approve {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #10b981;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-approve:hover {
+    background: #10b981;
+    color: #ffffff;
+}
+
+.btn-reject {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #ef4444;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-reject:hover {
+    background: #ef4444;
+    color: #ffffff;
+}
+
+/* Seznam schválených hráčů */
 .room-players-box {
     background: #121318;
     border: 1px solid #242632;
     border-radius: 6px;
     padding: 16px;
-    margin: 20px 0;
+    margin: 16px 0 20px 0;
     text-align: left;
 }
 
@@ -228,7 +468,7 @@
 .host-role-notice {
     font-size: 12px;
     color: #9ca3af;
-    margin: 8px 0 0 0;
+    margin: 10px 0 0 0;
     text-align: center;
 }
 
@@ -236,33 +476,11 @@
     display: flex;
     gap: 10px;
     justify-content: center;
-    margin-top: 20px;
-}
-
-.btn-secondary {
-    padding: 8px 14px;
-    background: #181920;
-    border: 1px solid #2d2f3b;
-    color: #d1d5db;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.btn-secondary:hover:not(:disabled) {
-    background: #20222c;
-    border-color: #3f4252;
-    color: #f3f4f6;
-}
-
-.btn-secondary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    margin-top: 16px;
 }
 
 .btn-leave {
-    padding: 8px 14px;
+    padding: 8px 16px;
     background: transparent;
     border: 1px solid rgba(239, 68, 68, 0.3);
     color: #ef4444;
@@ -275,65 +493,4 @@
 .btn-leave:hover {
     background: rgba(239, 68, 68, 0.1);
     border-color: #ef4444;
-}
-
-/* Leaderboard section */
-.leaderboard-section {
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid #242632;
-}
-
-.leaderboard-toggle-btn {
-    background: transparent;
-    border: none;
-    color: #9ca3af;
-    font-size: 13px;
-    cursor: pointer;
-    padding: 4px;
-    transition: color 0.15s ease;
-}
-
-.leaderboard-toggle-btn:hover {
-    color: #f3f4f6;
-}
-
-.leaderboard-card {
-    background: #121318;
-    border: 1px solid #242632;
-    border-radius: 6px;
-    padding: 16px;
-    margin-top: 12px;
-    text-align: left;
-}
-
-.leaderboard-card h4 {
-    margin: 0 0 12px 0;
-    font-size: 13px;
-    font-weight: 600;
-    color: #f3f4f6;
-}
-
-.leaderboard-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.leaderboard-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 4px;
-    border-bottom: 1px solid #1c1d26;
-    font-size: 13px;
-    color: #d1d5db;
-}
-
-.leaderboard-item:last-child {
-    border-bottom: none;
-}
-
-.leaderboard-score {
-    color: #10b981;
-    font-weight: 600;
 }

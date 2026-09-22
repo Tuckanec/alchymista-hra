@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import bcrypt from 'bcryptjs';
 import { supabase } from './supabaseClient';
 import './Auth.css';
 
@@ -63,7 +64,21 @@ export default function Auth({ onLogin, showToast }) {
                     return;
                 }
 
-                if (!uzivatel || uzivatel.heslo !== formData.heslo) {
+                if (!uzivatel) {
+                    notify('Neplatná přezdívka nebo heslo.', 'error');
+                    return;
+                }
+
+                // Bezpečné porovnání hesla pomocí bcryptjs
+                let isMatch = false;
+                try {
+                    isMatch = bcrypt.compareSync(formData.heslo, uzivatel.heslo);
+                } catch (err) {
+                    console.error('Chyba při ověřování hashe:', err);
+                    isMatch = false;
+                }
+
+                if (!isMatch) {
                     notify('Neplatná přezdívka nebo heslo.', 'error');
                     return;
                 }
@@ -94,6 +109,10 @@ export default function Auth({ onLogin, showToast }) {
                     return;
                 }
 
+                // Hashování hesla pomocí bcryptjs před uložením do databáze
+                const salt = bcrypt.genSaltSync(10);
+                const hashedPassword = bcrypt.hashSync(formData.heslo, salt);
+
                 // Vložení nového hráče do tabulky uzivatele
                 const { error: insertError } = await supabase
                     .from('uzivatele')
@@ -101,7 +120,7 @@ export default function Auth({ onLogin, showToast }) {
                         {
                             prezdivka: cleanNick,
                             email: cleanEmail,
-                            heslo: formData.heslo,
+                            heslo: hashedPassword,
                             role: 'hrac'
                         }
                     ]);
