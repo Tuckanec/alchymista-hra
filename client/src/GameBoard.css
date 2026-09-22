@@ -1,0 +1,384 @@
+/* Herní deska - čistý minimalistický dark-mode layout */
+.gameboard-container {
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    background: #0f1016;
+    color: #f3f4f6;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: inherit;
+}
+
+/* Horní lišta herní desky */
+.gameboard-topbar {
+    height: 48px;
+    background: #14151e;
+    border-bottom: 1px solid #242635;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    font-size: 13px;
+}
+
+.gameboard-room-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.gameboard-room-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700;
+    color: #10b981;
+    background: #191a24;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid #282a3a;
+    letter-spacing: 1px;
+}
+
+.gameboard-layout {
+    display: grid;
+    grid-template-columns: 1fr 290px;
+    flex: 1;
+    height: calc(100vh - 48px);
+    overflow: hidden;
+}
+
+/* Hlavní herní stůl */
+.gameboard-table {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: radial-gradient(circle at center, #141622 0%, #0d0e14 100%);
+    overflow-y: auto;
+    position: relative;
+}
+
+/* 1. Horní zóna: Soupeři */
+.opponents-zone {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    min-height: 80px;
+    align-items: center;
+}
+
+.opponent-card {
+    background: #161722;
+    border: 1px solid #252838;
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 0.15s ease;
+}
+
+.opponent-card.is-turn {
+    border-color: #10b981;
+    background: #181c26;
+}
+
+.opponent-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e5e7eb;
+}
+
+.opponent-turn-indicator {
+    font-size: 10px;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+.opponent-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+.opponent-cards-badge {
+    background: #202230;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #2a2d40;
+}
+
+/* 2. Středová zóna: Kotlík (společná plocha) */
+.cauldron-zone {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: auto 0;
+    padding: 12px 0;
+}
+
+.cauldron-frame {
+    width: 100%;
+    max-width: 520px;
+    background: #141620;
+    border: 1px dashed #2e3347;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.cauldron-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cauldron-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #d1d5db;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cauldron-recipe-tag {
+    font-size: 11px;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+
+.cauldron-content {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    min-height: 100px;
+    align-items: center;
+}
+
+.cauldron-slot {
+    width: 80px;
+    height: 100px;
+    border: 1px dashed #282b3d;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #6b7280;
+    background: rgba(18, 20, 28, 0.5);
+}
+
+.cauldron-desc {
+    font-size: 12px;
+    color: #6b7280;
+    margin: 0;
+}
+
+/* 3. Spodní zóna: Tvoje ruka */
+.hand-zone {
+    background: #13151f;
+    border: 1px solid #232636;
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.hand-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #9ca3af;
+}
+
+.hand-cards {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+/* Herní karta (Surovina) */
+.game-card {
+    min-width: 110px;
+    width: 110px;
+    height: 145px;
+    background: #181a24;
+    border: 1px solid #2b2f42;
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.game-card:hover {
+    transform: translateY(-6px);
+    border-color: #10b981;
+}
+
+.game-card-type {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #9ca3af;
+    display: flex;
+    justify-content: space-between;
+}
+
+.game-card-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f3f4f6;
+    margin: auto 0;
+    text-align: center;
+    line-height: 1.3;
+}
+
+.game-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: #6b7280;
+    border-top: 1px solid #242738;
+    padding-top: 4px;
+}
+
+/* 4. Pravý panel: Herní log a ovládání */
+.gameboard-sidebar {
+    background: #13141d;
+    border-left: 1px solid #232635;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.sidebar-section-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #232635;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.log-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.log-entry {
+    font-size: 12px;
+    line-height: 1.4;
+    color: #9ca3af;
+    border-left: 2px solid #2b2e40;
+    padding-left: 8px;
+}
+
+.log-entry.log-system {
+    border-color: #3b82f6;
+    color: #bfdbfe;
+}
+
+.log-entry.log-turn {
+    border-color: #10b981;
+    color: #d1fae5;
+}
+
+.log-time {
+    font-size: 10px;
+    color: #4b5563;
+    margin-right: 4px;
+}
+
+.sidebar-controls {
+    padding: 16px;
+    border-top: 1px solid #232635;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: #11121a;
+}
+
+.btn-end-turn {
+    width: 100%;
+    padding: 10px;
+    background: #10b981;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.btn-end-turn:hover:not(:disabled) {
+    background: #059669;
+}
+
+.btn-end-turn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #252838;
+    color: #6b7280;
+}
+
+.btn-leave-game {
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-leave-game:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+}
+
+@media (max-width: 860px) {
+    .gameboard-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 200px;
+    }
+    .gameboard-sidebar {
+        border-left: none;
+        border-top: 1px solid #232635;
+    }
+}

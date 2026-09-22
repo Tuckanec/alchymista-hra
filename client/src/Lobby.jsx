@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import GameBoard from './GameBoard';
 import './Lobby.css';
 
 export default function Lobby({ user, onLogout, showToast }) {
@@ -7,9 +8,11 @@ export default function Lobby({ user, onLogout, showToast }) {
     const [currentRoom, setCurrentRoom] = useState(null);
     const [isHost, setIsHost] = useState(false);
     const [myPlayerStatus, setMyPlayerStatus] = useState(null); // 'pending' | 'approved' | null
+    const [roomStatus, setRoomStatus] = useState('waiting'); // 'waiting' | 'playing'
     const [players, setPlayers] = useState([]);
     const [activeRooms, setActiveRooms] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [checkingRoom, setCheckingRoom] = useState(Boolean(user?.id));
 
     // Reference pro předcházení duplicitním notifikacím o schválení
     const prevStatusRef = useRef(null);
@@ -26,7 +29,7 @@ export default function Lobby({ user, onLogout, showToast }) {
     // 0. AUTOMATICKÝ RECONNECT PO OBNOVENÍ STRÁNKY (F5)
     // =========================================================
     useEffect(() => {
-        if (!user || !user.id || currentRoom) return;
+        if (!user?.id) return;
 
         let isCancelled = false;
 
@@ -40,7 +43,9 @@ export default function Lobby({ user, onLogout, showToast }) {
                     .limit(1)
                     .maybeSingle();
 
-                if (!isCancelled && !error && data) {
+                if (error) {
+                    console.error('Chyba při auto-reconnectu do laboratoře:', error);
+                } else if (!isCancelled && data) {
                     prevStatusRef.current = data.status;
                     setMyPlayerStatus(data.status);
                     setIsHost(!!data.is_host);
@@ -49,6 +54,10 @@ export default function Lobby({ user, onLogout, showToast }) {
                 }
             } catch (err) {
                 console.error('Chyba při automatickém reconnectu do laboratoře:', err);
+            } finally {
+                if (!isCancelled) {
+                    setCheckingRoom(false);
+                }
             }
         };
 
@@ -57,7 +66,7 @@ export default function Lobby({ user, onLogout, showToast }) {
         return () => {
             isCancelled = true;
         };
-    }, [user, currentRoom, notify]);
+    }, [user, notify]);
 
     // =========================================================
     // 1. NAČTENÍ AKTIVNÍCH LABORATOŘÍ A REALTIME ODBĚR 'rooms'
@@ -181,6 +190,56 @@ export default function Lobby({ user, onLogout, showToast }) {
             supabase.removeChannel(roomChannel);
         };
     }, [currentRoom, user.id, notify]);
+
+    // =========================================================
+    // 2b. ODBĚR STAVU MÍSTNOSTI (WAITING / PLAYING)
+    // =========================================================
+    useEffect(() => {
+        if (!currentRoom) return;
+
+        let isCancelled = false;
+
+        const fetchRoomStatus = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('rooms')
+                    .select('status')
+                    .eq('room_code', currentRoom)
+                    .maybeSingle();
+
+                if (!isCancelled && !error && data && data.status) {
+                    setRoomStatus(data.status);
+                }
+            } catch (err) {
+                console.error('Chyba při načítání stavu místnosti:', err);
+            }
+        };
+
+        fetchRoomStatus();
+
+        const roomStatusChannel = supabase
+            .channel(`room_status_${currentRoom}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'rooms',
+                    filter: `room_code=eq.${currentRoom}`
+                },
+                (payload) => {
+                    if (payload.new && payload.new.status) {
+                        setRoomStatus(payload.new.status);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            isCancelled = true;
+            supabase.removeChannel(roomStatusChannel);
+        };
+    }, [currentRoom]);
 
     // =========================================================
     // 3. ZALOŽENÍ NOVÉ LABORATOŘE
@@ -410,6 +469,29 @@ export default function Lobby({ user, onLogout, showToast }) {
     };
 
     // =========================================================
+    // 5c. ZAHÁJENÍ HRY / VAŘENÍ (HOST ACTION)
+    // =========================================================
+    const handleStartGame = async () => {
+        if (!isHost || !currentRoom) return;
+
+        try {
+            const { error } = await supabase
+                .from('rooms')
+                .update({ status: 'playing' })
+                .eq('room_code', currentRoom);
+
+            if (error) {
+                notify('Nepodařilo se zahájit hru: ' + error.message, 'error');
+            } else {
+                setRoomStatus('playing');
+                notify('Vaření začíná! Kotlík byl zapálen.', 'success');
+            }
+        } catch (err) {
+            console.error('Chyba při zahájení vaření:', err);
+        }
+    };
+
+    // =========================================================
     // 6. OPUŠTĚNÍ LABORATOŘE & PŘEDÁVÁNÍ SPRÁVCOVSTVÍ (HOST TRANSFER)
     // =========================================================
     const handleLeaveRoom = async () => {
@@ -492,6 +574,7 @@ export default function Lobby({ user, onLogout, showToast }) {
             setPlayers([]);
             setIsHost(false);
             setMyPlayerStatus(null);
+            setRoomStatus('waiting');
         }
     };
 
@@ -507,6 +590,21 @@ export default function Lobby({ user, onLogout, showToast }) {
     // Filtrovaní hráči pro zobrazení
     const approvedPlayers = players.filter((p) => p.status === 'approved');
     const pendingPlayers = players.filter((p) => p.status === 'pending');
+
+    // =========================================================
+    // UI: KONTROLA AKTIVNÍ RELACE PO OBNOVENÍ (F5)
+    // =========================================================
+    if (checkingRoom) {
+        return (
+            <div className="lobby-wrapper">
+                <div className="lobby-card">
+                    <p style={{ color: '#9ca3af', fontSize: '14px', margin: '24px 0' }}>
+                        Ověřuji stav laboratoře...
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     // =========================================================
     // UI: ČEKÁRNA PRO NEZCHVÁLENÉHO UČEDNÍKA (PENDING SCREEN)
@@ -542,6 +640,21 @@ export default function Lobby({ user, onLogout, showToast }) {
     // UI: VNITŘEK LABORATOŘE (SCHVÁLENÝ HRÁČ / SPRÁVCE)
     // =========================================================
     if (currentRoom && myPlayerStatus === 'approved') {
+        // Pokud hra již začala, zobrazíme herní desku GameBoard
+        if (roomStatus === 'playing') {
+            return (
+                <GameBoard
+                    roomCode={currentRoom}
+                    user={user}
+                    isHost={isHost}
+                    players={approvedPlayers}
+                    onLeaveRoom={handleLeaveRoom}
+                    showToast={showToast}
+                />
+            );
+        }
+
+        // Jinak zobrazíme čekárnu v laboratoři před spuštěním vaření
         return (
             <div className="lobby-wrapper">
                 <div className="lobby-card">
@@ -644,6 +757,16 @@ export default function Lobby({ user, onLogout, showToast }) {
                     </div>
 
                     <div className="room-actions">
+                        {isHost && (
+                            <button
+                                type="button"
+                                onClick={handleStartGame}
+                                className="btn-start-game"
+                            >
+                                Zahájit vaření
+                            </button>
+                        )}
+
                         <button 
                             type="button" 
                             onClick={handleLeaveRoom}

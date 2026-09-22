@@ -58,12 +58,18 @@ export default function Auth({ onLogin, showToast }) {
             }
 
             notify(`Vstupuješ jako host (${data.prezdivka}).`, 'info');
-            onLogin({ 
+            const userData = { 
                 prezdivka: data.prezdivka, 
-                id: data.id, 
+                id: Number(data.id), 
                 isGuest: true,
                 role: 'guest'
-            });
+            };
+            try {
+                localStorage.setItem('alchymista_user', JSON.stringify(userData));
+            } catch (storageErr) {
+                console.error('Chyba při zápisu do localStorage:', storageErr);
+            }
+            onLogin(userData);
         } catch (err) {
             console.error('Neočekávaná chyba při přihlášení hosta:', err);
             notify('Chyba spojení se Supabase.', 'error');
@@ -114,12 +120,18 @@ export default function Auth({ onLogin, showToast }) {
                 }
 
                 notify('Vítej zpět v laboratoři!', 'success');
-                onLogin({ 
+                const userData = { 
                     prezdivka: uzivatel.prezdivka, 
-                    id: String(uzivatel.id),
+                    id: Number(uzivatel.id),
                     role: uzivatel.role || 'hrac',
                     isGuest: false
-                });
+                };
+                try {
+                    localStorage.setItem('alchymista_user', JSON.stringify(userData));
+                } catch (storageErr) {
+                    console.error('Chyba při zápisu do localStorage:', storageErr);
+                }
+                onLogin(userData);
             } else {
                 // Registrace - kontrola duplicity v tabulce uzivatele
                 const { data: existujici, error: checkError } = await supabase

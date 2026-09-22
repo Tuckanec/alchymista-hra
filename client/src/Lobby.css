@@ -503,6 +503,22 @@
     margin-top: 16px;
 }
 
+.btn-start-game {
+    padding: 8px 18px;
+    background: #10b981;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.btn-start-game:hover {
+    background: #059669;
+}
+
 .btn-leave {
     padding: 8px 16px;
     background: transparent;

@@ -7,21 +7,21 @@ import './App.css';
 const STORAGE_KEY = 'alchymista_user';
 
 function App() {
-  // Inicializace stavu přímo z localStorage (okamžitá obnova bez probliku přihlášení)
+  // Synchronní inicializace stavu přímo z localStorage (zabraňuje jakémukoliv probliku přihlašovací obrazovky)
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem(STORAGE_KEY);
-      if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        if (parsed && parsed.id) {
-          return parsed;
-        }
+      if (!savedUser) return null;
+      const parsed = JSON.parse(savedUser);
+      // Ověříme, že uložený uživatel má platné ID
+      if (parsed && parsed.id && !isNaN(Number(parsed.id))) {
+        return parsed;
       }
+      return null;
     } catch (err) {
-      console.error('Chyba při obnově uživatele z localStorage:', err);
-      localStorage.removeItem(STORAGE_KEY);
+      console.error('Chyba při čtení localStorage:', err);
+      return null;
     }
-    return null;
   });
 
   const [toast, setToast] = useState(null);
@@ -46,21 +46,21 @@ function App() {
   }, []);
 
   const handleLogin = (userData) => {
-    setUser(userData);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
     } catch (err) {
       console.error('Chyba při ukládání do localStorage:', err);
     }
+    setUser(userData);
   };
 
   const handleLogout = () => {
-    setUser(null);
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch (err) {
       console.error('Chyba při mazání localStorage:', err);
     }
+    setUser(null);
     showToast('Byl jsi úspěšně odhlášen.', 'info');
   };
 
