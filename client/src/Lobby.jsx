@@ -30,9 +30,10 @@ export default function Lobby({ user, onLogout, showToast }) {
 
         const fetchRooms = async () => {
             try {
+                // Supabase implicitní join přes cizí klíč host_id -> uzivatele(id)
                 const { data, error } = await supabase
                     .from('rooms')
-                    .select('*')
+                    .select('*, uzivatele(prezdivka)')
                     .order('created_at', { ascending: false });
 
                 if (!isCancelled && !error && data) {
@@ -75,9 +76,10 @@ export default function Lobby({ user, onLogout, showToast }) {
 
         const fetchPlayers = async () => {
             try {
+                // Supabase implicitní join přes cizí klíč player_id -> uzivatele(id)
                 const { data, error } = await supabase
                     .from('room_players')
-                    .select('*')
+                    .select('*, uzivatele(prezdivka)')
                     .eq('room_code', currentRoom)
                     .order('joined_at', { ascending: true });
 
@@ -90,7 +92,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                     setPlayers(data);
 
                     // Zjistíme stav přihlášeného hráče
-                    const me = data.find((p) => String(p.player_id) === String(user.id));
+                    const me = data.find((p) => Number(p.player_id) === Number(user.id));
                     if (me) {
                         setIsHost(!!me.is_host);
 
@@ -151,14 +153,13 @@ export default function Lobby({ user, onLogout, showToast }) {
         try {
             const newCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
-            // 1. Vložení místnosti do tabulky 'rooms'
+            // 1. Vložení místnosti do tabulky 'rooms' (pouze host_id jako int8 cizí klíč)
             const { error: roomError } = await supabase
                 .from('rooms')
                 .insert([
                     {
                         room_code: newCode,
-                        host_id: String(user.id),
-                        host_name: user.prezdivka,
+                        host_id: Number(user.id),
                         status: 'waiting'
                     }
                 ]);
@@ -169,14 +170,13 @@ export default function Lobby({ user, onLogout, showToast }) {
                 return;
             }
 
-            // 2. Vložení zakladatele jako schváleného správce (is_host: true, status: 'approved')
+            // 2. Vložení zakladatele jako schváleného správce (pouze player_id jako int8 cizí klíč)
             const { error: playerError } = await supabase
                 .from('room_players')
                 .insert([
                     {
                         room_code: newCode,
-                        player_id: String(user.id),
-                        prezdivka: user.prezdivka,
+                        player_id: Number(user.id),
                         is_guest: !!user.isGuest,
                         is_host: true,
                         status: 'approved'
@@ -232,9 +232,9 @@ export default function Lobby({ user, onLogout, showToast }) {
             // 2. Kontrola, zda hráč již v místnosti není
             const { data: existing, error: existingError } = await supabase
                 .from('room_players')
-                .select('*')
+                .select('*, uzivatele(prezdivka)')
                 .eq('room_code', code)
-                .eq('player_id', String(user.id))
+                .eq('player_id', Number(user.id))
                 .maybeSingle();
 
             if (existingError) {
@@ -257,7 +257,7 @@ export default function Lobby({ user, onLogout, showToast }) {
             }
 
             // Pokud je hráč původní zakladatel místnosti podle rooms tabulky, rovnou approved host
-            const isOriginalHost = String(room.host_id) === String(user.id);
+            const isOriginalHost = Number(room.host_id) === Number(user.id);
             const initialStatus = isOriginalHost ? 'approved' : 'pending';
 
             const { error: joinError } = await supabase
@@ -265,8 +265,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                 .insert([
                     {
                         room_code: code,
-                        player_id: String(user.id),
-                        prezdivka: user.prezdivka,
+                        player_id: Number(user.id),
                         is_guest: !!user.isGuest,
                         is_host: isOriginalHost,
                         status: initialStatus
@@ -307,6 +306,7 @@ export default function Lobby({ user, onLogout, showToast }) {
     // 5. SCHVALOVÁNÍ A ODMÍTÁNÍ ŽÁDOSTÍ (HOST ACTIONS)
     // =========================================================
     const handleApprovePlayer = async (targetPlayer) => {
+        const playerName = targetPlayer.uzivatele?.prezdivka || 'Učedník';
         try {
             const { error } = await supabase
                 .from('room_players')
@@ -316,7 +316,7 @@ export default function Lobby({ user, onLogout, showToast }) {
             if (error) {
                 notify('Chyba při schvalování: ' + error.message, 'error');
             } else {
-                notify(`Učedník ${targetPlayer.prezdivka} byl schválen.`, 'success');
+                notify(`Učedník ${playerName} byl schválen.`, 'success');
             }
         } catch (err) {
             console.error('Chyba při schvalování:', err);
@@ -324,6 +324,7 @@ export default function Lobby({ user, onLogout, showToast }) {
     };
 
     const handleRejectPlayer = async (targetPlayer) => {
+        const playerName = targetPlayer.uzivatele?.prezdivka || 'Učedník';
         try {
             const { error } = await supabase
                 .from('room_players')
@@ -333,7 +334,7 @@ export default function Lobby({ user, onLogout, showToast }) {
             if (error) {
                 notify('Chyba při zamítnutí: ' + error.message, 'error');
             } else {
-                notify(`Žádost hráče ${targetPlayer.prezdivka} byla zamítnuta.`, 'info');
+                notify(`Žádost hráče ${playerName} byla zamítnuta.`, 'info');
             }
         } catch (err) {
             console.error('Chyba při zamítnutí:', err);
@@ -352,7 +353,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                 .from('room_players')
                 .select('*')
                 .eq('room_code', currentRoom)
-                .neq('player_id', String(user.id))
+                .neq('player_id', Number(user.id))
                 .order('joined_at', { ascending: true });
 
             if (fetchErr) {
@@ -372,10 +373,10 @@ export default function Lobby({ user, onLogout, showToast }) {
                         .update({ is_host: true, status: 'approved' })
                         .eq('id', nextHost.id);
 
-                    // Aktualizujeme záznam v tabulce 'rooms'
+                    // Aktualizujeme záznam v tabulce 'rooms' (pouze host_id)
                     await supabase
                         .from('rooms')
-                        .update({ host_id: nextHost.player_id, host_name: nextHost.prezdivka })
+                        .update({ host_id: Number(nextHost.player_id) })
                         .eq('room_code', currentRoom);
 
                     // Smažeme odcházejícího hosta
@@ -383,14 +384,14 @@ export default function Lobby({ user, onLogout, showToast }) {
                         .from('room_players')
                         .delete()
                         .eq('room_code', currentRoom)
-                        .eq('player_id', String(user.id));
+                        .eq('player_id', Number(user.id));
                 } else {
                     // V místnosti nezůstal nikdo -> smažeme hráče i celou místnost z rooms
                     await supabase
                         .from('room_players')
                         .delete()
                         .eq('room_code', currentRoom)
-                        .eq('player_id', String(user.id));
+                        .eq('player_id', Number(user.id));
 
                     await supabase
                         .from('rooms')
@@ -403,7 +404,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                     .from('room_players')
                     .delete()
                     .eq('room_code', currentRoom)
-                    .eq('player_id', String(user.id));
+                    .eq('player_id', Number(user.id));
 
                 // Pokud byl poslední hráč v místnosti, místnost také smažeme
                 if (remaining.length === 0) {
@@ -498,32 +499,35 @@ export default function Lobby({ user, onLogout, showToast }) {
                                 <p className="empty-subtext">Žádné nevyřízené žádosti o vstup.</p>
                             ) : (
                                 <ul className="pending-list">
-                                    {pendingPlayers.map((p) => (
-                                        <li key={p.id} className="pending-item">
-                                            <div className="pending-item-info">
-                                                <span className="pending-name">{p.prezdivka}</span>
-                                                {p.is_guest && <span className="badge-guest">Host</span>}
-                                            </div>
-                                            <div className="pending-item-actions">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleApprovePlayer(p)}
-                                                    className="btn-approve"
-                                                    title="Povolit vstup"
-                                                >
-                                                    Schválit
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRejectPlayer(p)}
-                                                    className="btn-reject"
-                                                    title="Odmítnout žádost"
-                                                >
-                                                    Odmítnout
-                                                </button>
-                                            </div>
-                                        </li>
-                                    ))}
+                                    {pendingPlayers.map((p) => {
+                                        const playerName = p.uzivatele?.prezdivka || 'Učedník';
+                                        return (
+                                            <li key={p.id} className="pending-item">
+                                                <div className="pending-item-info">
+                                                    <span className="pending-name">{playerName}</span>
+                                                    {p.is_guest && <span className="badge-guest">Host</span>}
+                                                </div>
+                                                <div className="pending-item-actions">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleApprovePlayer(p)}
+                                                        className="btn-approve"
+                                                        title="Povolit vstup"
+                                                    >
+                                                        Schválit
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRejectPlayer(p)}
+                                                        className="btn-reject"
+                                                        title="Odmítnout žádost"
+                                                    >
+                                                        Odmítnout
+                                                    </button>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
                                 </ul>
                             )}
                         </div>
@@ -538,12 +542,13 @@ export default function Lobby({ user, onLogout, showToast }) {
 
                         <ul className="player-list">
                             {approvedPlayers.map((p) => {
-                                const isMe = String(p.player_id) === String(user.id);
+                                const isMe = Number(p.player_id) === Number(user.id);
+                                const playerName = p.uzivatele?.prezdivka || 'Alchymista';
                                 return (
                                     <li key={p.id || p.player_id} className="player-item">
                                         <span>
                                             {p.is_host ? '👑 ' : ''}
-                                            {p.prezdivka}
+                                            {playerName}
                                             {isMe && <span className="player-me">(Ty)</span>}
                                         </span>
                                         {p.is_guest && <span className="badge-guest">Host</span>}
@@ -640,24 +645,27 @@ export default function Lobby({ user, onLogout, showToast }) {
                         <p className="empty-rooms-text">Aktuálně není otevřena žádná laboratoř. Buď první!</p>
                     ) : (
                         <ul className="active-rooms-list">
-                            {activeRooms.map((room) => (
-                                <li key={room.id || room.room_code} className="active-room-item">
-                                    <div className="active-room-info">
-                                        <div className="active-room-code">{room.room_code}</div>
-                                        <div className="active-room-host">
-                                            Správce: <strong>{room.host_name}</strong>
+                            {activeRooms.map((room) => {
+                                const hostDisplayName = room.uzivatele?.prezdivka || 'Neznámý';
+                                return (
+                                    <li key={room.id || room.room_code} className="active-room-item">
+                                        <div className="active-room-info">
+                                            <div className="active-room-code">{room.room_code}</div>
+                                            <div className="active-room-host">
+                                                Správce: <strong>{hostDisplayName}</strong>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        disabled={loading}
-                                        onClick={() => joinLaboratoryByCode(room.room_code)}
-                                        className="btn-room-enter"
-                                    >
-                                        Požádat o vstup
-                                    </button>
-                                </li>
-                            ))}
+                                        <button
+                                            type="button"
+                                            disabled={loading}
+                                            onClick={() => joinLaboratoryByCode(room.room_code)}
+                                            className="btn-room-enter"
+                                        >
+                                            Požádat o vstup
+                                        </button>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                 </div>

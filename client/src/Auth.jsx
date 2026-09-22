@@ -31,15 +31,45 @@ export default function Auth({ onLogin, showToast }) {
         });
     };
 
-    const handleGuestLogin = () => {
-        const randomId = Math.floor(Math.random() * 10000);
-        notify('Vstupuješ jako host.', 'info');
-        onLogin({ 
-            prezdivka: `Mnich_${randomId}`, 
-            id: `guest_${randomId}`, 
-            isGuest: true,
-            role: 'host'
-        });
+    const handleGuestLogin = async () => {
+        setLoading(true);
+        try {
+            const randomId = Math.floor(100000 + Math.random() * 900000);
+            const guestNick = `Mnich_${randomId}`;
+
+            // Vložíme hosta do tabulky uzivatele a získáme vygenerované BIGINT id
+            const { data, error } = await supabase
+                .from('uzivatele')
+                .insert([
+                    {
+                        prezdivka: guestNick,
+                        email: null,
+                        heslo: null,
+                        role: 'guest'
+                    }
+                ])
+                .select('id, prezdivka, role')
+                .single();
+
+            if (error) {
+                console.error('Chyba při vstupu jako host:', error);
+                notify('Nepodařilo se vytvořit účet hosta: ' + error.message, 'error');
+                return;
+            }
+
+            notify(`Vstupuješ jako host (${data.prezdivka}).`, 'info');
+            onLogin({ 
+                prezdivka: data.prezdivka, 
+                id: data.id, 
+                isGuest: true,
+                role: 'guest'
+            });
+        } catch (err) {
+            console.error('Neočekávaná chyba při přihlášení hosta:', err);
+            notify('Chyba spojení se Supabase.', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSubmit = async (e) => {
