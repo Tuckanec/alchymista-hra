@@ -233,13 +233,31 @@ export default function Lobby({ user, onLogout, showToast }) {
                     }
                 }
             )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'rooms',
+                    filter: `room_code=eq.${currentRoom}`
+                },
+                () => {
+                    notify('Hra byla zrušena, všichni ostatní alchymisté utekli.', 'error');
+                    prevStatusRef.current = null;
+                    setCurrentRoom(null);
+                    setPlayers([]);
+                    setIsHost(false);
+                    setMyPlayerStatus(null);
+                    setRoomStatus('waiting');
+                }
+            )
             .subscribe();
 
         return () => {
             isCancelled = true;
             supabase.removeChannel(roomStatusChannel);
         };
-    }, [currentRoom]);
+    }, [currentRoom, notify]);
 
     // =========================================================
     // 3. ZALOŽENÍ NOVÉ LABORATOŘE
@@ -474,6 +492,11 @@ export default function Lobby({ user, onLogout, showToast }) {
     const handleStartGame = async () => {
         if (!isHost || !currentRoom) return;
 
+        if (approvedPlayers.length < 2) {
+            notify('K zahájení hry jsou potřeba alespoň 2 schválení hráči.', 'error');
+            return;
+        }
+
         try {
             const { error } = await supabase
                 .from('rooms')
@@ -494,8 +517,9 @@ export default function Lobby({ user, onLogout, showToast }) {
     // =========================================================
     // 6. OPUŠTĚNÍ LABORATOŘE & PŘEDÁVÁNÍ SPRÁVCOVSTVÍ (HOST TRANSFER)
     // =========================================================
-    const handleLeaveRoom = async () => {
+    const handleLeaveRoom = async (silent = false) => {
         if (!currentRoom) return;
+        const isSilent = silent === true;
 
         try {
             // 1. Zjistíme ostatní hráče v této laboratoři
@@ -565,7 +589,9 @@ export default function Lobby({ user, onLogout, showToast }) {
                 }
             }
 
-            notify('Laboratoř opuštěna.', 'info');
+            if (!isSilent) {
+                notify('Laboratoř opuštěna.', 'info');
+            }
         } catch (err) {
             console.error('Chyba při opouštění místnosti:', err);
         } finally {
@@ -762,8 +788,10 @@ export default function Lobby({ user, onLogout, showToast }) {
                                 type="button"
                                 onClick={handleStartGame}
                                 className="btn-start-game"
+                                disabled={approvedPlayers.length < 2}
+                                title={approvedPlayers.length < 2 ? 'K zahájení hry jsou potřeba alespoň 2 schválení učedníci' : 'Zahájit vaření'}
                             >
-                                Zahájit vaření
+                                Zahájit vaření {approvedPlayers.length < 2 ? '(min. 2 hráči)' : ''}
                             </button>
                         )}
 

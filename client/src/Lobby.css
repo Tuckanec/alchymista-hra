@@ -519,6 +519,12 @@
     background: #059669;
 }
 
+.btn-start-game:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #374151;
+}
+
 .btn-leave {
     padding: 8px 16px;
     background: transparent;
