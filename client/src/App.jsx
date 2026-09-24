@@ -1,13 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import Lobby from './Lobby';
-import Auth from './Auth';
 import Toast from './Toast';
 import './App.css';
 
 const STORAGE_KEY = 'alchymista_user';
 
 function App() {
-  // Synchronní inicializace stavu přímo z localStorage (zabraňuje jakémukoliv probliku přihlašovací obrazovky)
+  // Synchronní inicializace stavu přímo z localStorage
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem(STORAGE_KEY);
@@ -67,12 +66,12 @@ function App() {
   return (
     <div className="app-container">
       <Toast toast={toast} onClose={handleCloseToast} />
-
-      {!user ? (
-        <Auth onLogin={handleLogin} showToast={showToast} />
-      ) : (
-        <Lobby user={user} onLogout={handleLogout} showToast={showToast} />
-      )}
+      <Lobby
+        user={user}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+        showToast={showToast}
+      />
     </div>
   );
 }

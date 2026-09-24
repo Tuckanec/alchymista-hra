@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import GameBoard from './GameBoard';
+import Auth from './Auth';
 import './Lobby.css';
 
-export default function Lobby({ user, onLogout, showToast }) {
+export default function Lobby({ user, onLogin, onLogout, showToast }) {
     const [joinCode, setJoinCode] = useState('');
     const [currentRoomName, setCurrentRoomName] = useState('');
     const [startingPlayerId, setStartingPlayerId] = useState('');
@@ -16,10 +17,11 @@ export default function Lobby({ user, onLogout, showToast }) {
     const [loading, setLoading] = useState(false);
     const [checkingRoom, setCheckingRoom] = useState(Boolean(user?.id));
 
-    // Navigace v postranním panelu a modální okno pro tvorbu laboratoře
+    // Navigace v postranním panelu a modální okno pro tvorbu laboratoře / přihlášení
     const [activeNav, setActiveNav] = useState('lobby'); // 'lobby' | 'profile' | 'stats'
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showAuthModal, setShowAuthModal] = useState(false);
     const [modalRoomName, setModalRoomName] = useState('');
     const [modalIsPublic, setModalIsPublic] = useState(true);
 
@@ -161,7 +163,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                     setPlayers(data);
 
                     // Zjistíme stav přihlášeného hráče
-                    const me = data.find((p) => Number(p.player_id) === Number(user.id));
+                    const me = data.find((p) => Number(p.player_id) === Number(user?.id));
                     if (me) {
                         setIsHost(!!me.is_host);
 
@@ -212,7 +214,7 @@ export default function Lobby({ user, onLogout, showToast }) {
             isCancelled = true;
             supabase.removeChannel(roomChannel);
         };
-    }, [currentRoom, user.id, notify]);
+    }, [currentRoom, user?.id, notify]);
 
     // =========================================================
     // 2b. ODBĚR STAVU MÍSTNOSTI (WAITING / PLAYING)
@@ -754,7 +756,17 @@ export default function Lobby({ user, onLogout, showToast }) {
                     {sidebarOpen ? '✕' : '☰'}
                 </button>
                 <div className="mobile-brand">⚗️ BuchyBuch</div>
-                <div className="mobile-user-tag">{user.prezdivka}</div>
+                {user ? (
+                    <div className="mobile-user-tag">{user.prezdivka}</div>
+                ) : (
+                    <button
+                        type="button"
+                        className="btn-mobile-login"
+                        onClick={() => setShowAuthModal(true)}
+                    >
+                        Přihlásit se
+                    </button>
+                )}
             </header>
 
             {/* Backdrop pro mobilní zobrazení */}
@@ -824,28 +836,49 @@ export default function Lobby({ user, onLogout, showToast }) {
                     </button>
                 </nav>
 
-                {/* Spodní část panelu: Profil přihlášeného hráče a Odhlášení */}
+                {/* Spodní část panelu: Profil přihlášeného hráče a Odhlášení / Přihlášení */}
                 <div className="sidebar-footer">
-                    <div className="sidebar-user-card">
-                        <div className="sidebar-avatar">
-                            {user.isGuest ? '🧪' : '🧙'}
-                        </div>
-                        <div className="sidebar-user-details">
-                            <span className="sidebar-user-name">{user.prezdivka}</span>
-                            <span className="sidebar-user-role">
-                                {user.isGuest ? 'Host' : 'Učedník'}
-                            </span>
-                        </div>
-                    </div>
+                    {user ? (
+                        <>
+                            <div className="sidebar-user-card">
+                                <div className="sidebar-avatar">🧙</div>
+                                <div className="sidebar-user-details">
+                                    <span className="sidebar-user-name">{user.prezdivka}</span>
+                                    <span className="sidebar-user-role">Alchymista</span>
+                                </div>
+                            </div>
 
-                    {onLogout && (
-                        <button
-                            type="button"
-                            onClick={handleLogoutClick}
-                            className="btn-sidebar-logout"
-                        >
-                            Odhlásit se
-                        </button>
+                            {onLogout && (
+                                <button
+                                    type="button"
+                                    onClick={handleLogoutClick}
+                                    className="btn-sidebar-logout"
+                                >
+                                    Odhlásit se
+                                </button>
+                            )}
+                        </>
+                    ) : (
+                        <>
+                            <div className="sidebar-user-card guest-card">
+                                <div className="sidebar-avatar">👤</div>
+                                <div className="sidebar-user-details">
+                                    <span className="sidebar-user-name">Návštěvník</span>
+                                    <span className="sidebar-user-role">Nepřihlášen</span>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowAuthModal(true);
+                                    setSidebarOpen(false);
+                                }}
+                                className="btn-sidebar-login"
+                            >
+                                Přihlásit se
+                            </button>
+                        </>
                     )}
                 </div>
             </aside>
@@ -858,22 +891,38 @@ export default function Lobby({ user, onLogout, showToast }) {
                             <div className="placeholder-icon">👤</div>
                             <h2>Můj Profil</h2>
                             <span className="badge-coming-soon">Připravujeme</span>
-                            <div className="profile-details-preview">
-                                <div className="profile-row">
-                                    <span>Přezdívka:</span>
-                                    <strong>{user.prezdivka}</strong>
-                                </div>
-                                <div className="profile-row">
-                                    <span>Role:</span>
-                                    <strong>{user.isGuest ? 'Host' : 'Učedník'}</strong>
-                                </div>
-                                {user.email && (
+                            {user ? (
+                                <div className="profile-details-preview">
                                     <div className="profile-row">
-                                        <span>E-mail:</span>
-                                        <strong>{user.email}</strong>
+                                        <span>Přezdívka:</span>
+                                        <strong>{user.prezdivka}</strong>
                                     </div>
-                                )}
-                            </div>
+                                    <div className="profile-row">
+                                        <span>Role:</span>
+                                        <strong>Alchymista</strong>
+                                    </div>
+                                    {user.email && (
+                                        <div className="profile-row">
+                                            <span>E-mail:</span>
+                                            <strong>{user.email}</strong>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="profile-guest-notice">
+                                    <p className="placeholder-hint">
+                                        Pro zobrazení svého profilu se musíš nejprve přihlásit.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAuthModal(true)}
+                                        className="btn-guest-auth"
+                                        style={{ marginBottom: '16px' }}
+                                    >
+                                        Přihlásit / Registrovat
+                                    </button>
+                                </div>
+                            )}
                             <p className="placeholder-hint">
                                 Možnost změny avataru, přezdívky a herních preferencí bude brzy dostupná.
                             </p>
@@ -1113,44 +1162,62 @@ export default function Lobby({ user, onLogout, showToast }) {
                             </div>
                         )}
 
-                        {/* 3. Vyčištěné Lobby (bez nadpisů, bez volného inputu, s tlačítkem otevírajícím modal) */}
+                        {/* 3. Vyčištěné Lobby */}
                         {!currentRoom && (
                             <div className="lobby-wrapper">
                                 <div className="lobby-card">
-                                    <button 
-                                        type="button"
-                                        onClick={() => {
-                                            setModalRoomName('');
-                                            setModalIsPublic(true);
-                                            setShowCreateModal(true);
-                                        }}
-                                        disabled={loading}
-                                        className="btn-create-room"
-                                    >
-                                        + Založit novou laboratoř
-                                    </button>
-
-                                    <div className="join-section">
-                                        <form onSubmit={handleJoinFormSubmit} className="join-form">
-                                            <input 
-                                                type="text" 
-                                                placeholder="PIN KÓD" 
-                                                value={joinCode}
-                                                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                                                maxLength={6}
-                                                disabled={loading}
-                                                className="pin-input"
-                                                aria-label="Kód laboratoře"
-                                            />
+                                    {user ? (
+                                        <>
                                             <button 
-                                                type="submit" 
-                                                disabled={loading || !joinCode}
-                                                className="btn-join"
+                                                type="button"
+                                                onClick={() => {
+                                                    setModalRoomName('');
+                                                    setModalIsPublic(true);
+                                                    setShowCreateModal(true);
+                                                }}
+                                                disabled={loading}
+                                                className="btn-create-room"
                                             >
-                                                Připojit se
+                                                + Založit novou laboratoř
                                             </button>
-                                        </form>
-                                    </div>
+
+                                            <div className="join-section">
+                                                <form onSubmit={handleJoinFormSubmit} className="join-form">
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="PIN KÓD" 
+                                                        value={joinCode}
+                                                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                                                        maxLength={6}
+                                                        disabled={loading}
+                                                        className="pin-input"
+                                                        aria-label="Kód laboratoře"
+                                                    />
+                                                    <button 
+                                                        type="submit" 
+                                                        disabled={loading || !joinCode}
+                                                        className="btn-join"
+                                                    >
+                                                        Připojit se
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="guest-cta-box">
+                                            <div className="guest-cta-icon">⚗️</div>
+                                            <p className="guest-cta-text">
+                                                Pro hraní alchymie se musíš přihlásit
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAuthModal(true)}
+                                                className="btn-guest-auth"
+                                            >
+                                                Přihlásit / Registrovat
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Seznam aktivních laboratoří v reálném čase */}
                                     <div className="active-rooms-section">
@@ -1179,7 +1246,14 @@ export default function Lobby({ user, onLogout, showToast }) {
                                                             <button
                                                                 type="button"
                                                                 disabled={loading}
-                                                                onClick={() => joinLaboratoryByCode(room.room_code)}
+                                                                onClick={() => {
+                                                                    if (!user) {
+                                                                        notify('Pro vstup do laboratoře se musíš přihlásit.', 'info');
+                                                                        setShowAuthModal(true);
+                                                                        return;
+                                                                    }
+                                                                    joinLaboratoryByCode(room.room_code);
+                                                                }}
                                                                 className="btn-room-enter"
                                                             >
                                                                 Požádat o vstup
@@ -1267,6 +1341,31 @@ export default function Lobby({ user, onLogout, showToast }) {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modální okno pro přihlášení / registraci */}
+            {showAuthModal && (
+                <div
+                    className="modal-overlay auth-modal-overlay"
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            setShowAuthModal(false);
+                        }
+                    }}
+                >
+                    <div className="auth-modal-window">
+                        <Auth
+                            onLogin={(userData) => {
+                                setShowAuthModal(false);
+                                if (onLogin) onLogin(userData);
+                            }}
+                            onClose={() => setShowAuthModal(false)}
+                            showToast={showToast}
+                        />
                     </div>
                 </div>
             )}

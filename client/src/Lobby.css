@@ -1291,3 +1291,101 @@
     }
 }
 
+/* =========================================================
+   STYL PRO NEPŘIHLÁŠENÉ NÁVŠTĚVNÍKY (GUEST CTA & LOGIN)
+   ========================================================= */
+
+.guest-cta-box {
+    background: linear-gradient(145deg, #181a24, #12131a);
+    border: 1px solid #2b2e3f;
+    border-radius: 12px;
+    padding: 28px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.guest-cta-icon {
+    font-size: 42px;
+    margin-bottom: 12px;
+    filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.4));
+}
+
+.guest-cta-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: #f3f4f6;
+    margin: 0 0 18px 0;
+    line-height: 1.4;
+}
+
+.btn-guest-auth {
+    padding: 12px 28px;
+    background: #10b981;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.btn-guest-auth:hover {
+    background: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45);
+}
+
+.btn-sidebar-login {
+    width: 100%;
+    padding: 10px 14px;
+    background: #10b981;
+    border: none;
+    color: #ffffff;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+}
+
+.btn-sidebar-login:hover {
+    background: #059669;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+}
+
+.btn-mobile-login {
+    background: #10b981;
+    border: none;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.btn-mobile-login:hover {
+    background: #059669;
+}
+
+.sidebar-user-card.guest-card {
+    opacity: 0.85;
+}
+
+.sidebar-user-card.guest-card .sidebar-user-role {
+    color: #9ca3af;
+}
+
+.profile-guest-notice {
+    text-align: center;
+}
+
+

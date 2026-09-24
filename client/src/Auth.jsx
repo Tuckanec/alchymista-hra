@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { supabase } from './supabaseClient';
 import './Auth.css';
 
-export default function Auth({ onLogin, showToast }) {
+export default function Auth({ onLogin, onClose, showToast }) {
     // Stav pro přepínání mezi formuláři (přihlášení / registrace)
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -29,53 +29,6 @@ export default function Auth({ onLogin, showToast }) {
             ...formData, 
             [e.target.name]: e.target.value 
         });
-    };
-
-    const handleGuestLogin = async () => {
-        setLoading(true);
-        try {
-            const randomId = Math.floor(100000 + Math.random() * 900000);
-            const guestNick = `Mnich_${randomId}`;
-
-            // Vložíme hosta do tabulky uzivatele a získáme vygenerované BIGINT id
-            const { data, error } = await supabase
-                .from('uzivatele')
-                .insert([
-                    {
-                        prezdivka: guestNick,
-                        email: null,
-                        heslo: null,
-                        role: 'guest'
-                    }
-                ])
-                .select('id, prezdivka, role')
-                .single();
-
-            if (error) {
-                console.error('Chyba při vstupu jako host:', error);
-                notify('Nepodařilo se vytvořit účet hosta: ' + error.message, 'error');
-                return;
-            }
-
-            notify(`Vstupuješ jako host (${data.prezdivka}).`, 'info');
-            const userData = { 
-                prezdivka: data.prezdivka, 
-                id: Number(data.id), 
-                isGuest: true,
-                role: 'guest'
-            };
-            try {
-                localStorage.setItem('alchymista_user', JSON.stringify(userData));
-            } catch (storageErr) {
-                console.error('Chyba při zápisu do localStorage:', storageErr);
-            }
-            onLogin(userData);
-        } catch (err) {
-            console.error('Neočekávaná chyba při přihlášení hosta:', err);
-            notify('Chyba spojení se Supabase.', 'error');
-        } finally {
-            setLoading(false);
-        }
     };
 
     const handleSubmit = async (e) => {
@@ -123,8 +76,7 @@ export default function Auth({ onLogin, showToast }) {
                 const userData = { 
                     prezdivka: uzivatel.prezdivka, 
                     id: Number(uzivatel.id),
-                    role: uzivatel.role || 'hrac',
-                    isGuest: false
+                    role: uzivatel.role || 'hrac'
                 };
                 try {
                     localStorage.setItem('alchymista_user', JSON.stringify(userData));
@@ -187,7 +139,19 @@ export default function Auth({ onLogin, showToast }) {
     return (
         <div className="auth-container">
             <div className="auth-box">
-                <h2>{isLogin ? 'Přihlášení do hry' : 'Registrace alchymisty'}</h2>
+                <div className="auth-header">
+                    <h2>{isLogin ? 'Přihlášení do hry' : 'Registrace alchymisty'}</h2>
+                    {onClose && (
+                        <button
+                            type="button"
+                            className="btn-auth-close"
+                            onClick={onClose}
+                            aria-label="Zavřít"
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
                 
                 <form onSubmit={handleSubmit}>
                     <div className="input-group">
@@ -241,15 +205,6 @@ export default function Auth({ onLogin, showToast }) {
                         {loading 
                             ? 'Ověřuji...' 
                             : (isLogin ? 'Přihlásit se' : 'Zaregistrovat se')}
-                    </button>
-                    
-                    <button 
-                        type="button" 
-                        className="guest-button" 
-                        onClick={handleGuestLogin}
-                        disabled={loading}
-                    >
-                        Pokračovat jako host
                     </button>
                 </form>
 

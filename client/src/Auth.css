@@ -6,24 +6,79 @@
     min-height: 100vh;
     background-color: #0f1117;
     padding: 20px;
+    box-sizing: border-box;
+}
+
+/* Modální okno pro Auth uvnitř aplikace */
+.auth-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+    box-sizing: border-box;
+    animation: fadeInModal 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-modal-window {
+    width: 100%;
+    max-width: 400px;
+}
+
+.auth-modal-window .auth-container {
+    min-height: auto;
+    background: transparent;
+    padding: 0;
+    width: 100%;
 }
 
 .auth-box {
     background: #181920;
     border: 1px solid #282a36;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 32px 28px;
     width: 100%;
     max-width: 380px;
     text-align: center;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+    box-sizing: border-box;
 }
 
-.auth-box h2 {
-    margin: 0 0 24px 0;
+.auth-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.auth-header h2 {
+    margin: 0;
     font-size: 20px;
-    font-weight: 600;
+    font-weight: 700;
     color: #f3f4f6;
     letter-spacing: -0.2px;
+    text-align: left;
+}
+
+.btn-auth-close {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+    line-height: 1;
+}
+
+.btn-auth-close:hover {
+    color: #f3f4f6;
+    background: #252838;
 }
 
 .input-group {
@@ -41,6 +96,7 @@
 
 .input-group input {
     width: 100%;
+    box-sizing: border-box;
     padding: 10px 12px;
     background: #121318;
     border: 1px solid #2d2f3b;
@@ -52,7 +108,8 @@
 }
 
 .input-group input:focus {
-    border-color: #3b82f6;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
 }
 
 .input-group input:disabled {
@@ -68,7 +125,7 @@
     color: #ffffff;
     border: none;
     border-radius: 6px;
-    font-weight: 500;
+    font-weight: 600;
     font-size: 14px;
     cursor: pointer;
     transition: background-color 0.15s ease;
@@ -83,31 +140,6 @@
     cursor: not-allowed;
 }
 
-.guest-button {
-    width: 100%;
-    padding: 10px 16px;
-    margin-top: 10px;
-    background: transparent;
-    color: #9ca3af;
-    border: 1px solid #2d2f3b;
-    border-radius: 6px;
-    font-weight: 500;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.guest-button:hover:not(:disabled) {
-    background: #20222c;
-    border-color: #3f4252;
-    color: #f3f4f6;
-}
-
-.guest-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
 .toggle-text {
     margin-top: 24px;
     margin-bottom: 0;
@@ -118,6 +150,6 @@
 }
 
 .toggle-text:hover {
-    color: #f3f4f6;
+    color: #10b981;
     text-decoration: underline;
 }

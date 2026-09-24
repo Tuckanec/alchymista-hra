@@ -2,7 +2,7 @@
     position: fixed;
     top: 20px;
     right: 20px;
-    z-index: 50;
+    z-index: 9999;
     pointer-events: none;
     width: auto;
     max-width: 420px;
@@ -78,5 +78,25 @@
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+/* Responzivní zobrazení Toast notifikací na mobilu (dole uprostřed) */
+@media (max-width: 768px) {
+    .toast-container {
+        top: auto;
+        bottom: 20px;
+        right: auto;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+        width: 90%;
+        max-width: 420px;
+        text-align: center;
+    }
+
+    .toast {
+        justify-content: center;
+        text-align: center;
     }
 }
