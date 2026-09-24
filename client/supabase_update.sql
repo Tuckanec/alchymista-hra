@@ -1,1 +1,1 @@
-ALTER TABLE rooms ADD COLUMN room_name text;
+ALTER TABLE rooms ADD COLUMN is_public boolean DEFAULT true;

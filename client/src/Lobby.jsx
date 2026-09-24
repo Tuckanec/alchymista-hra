@@ -5,7 +5,6 @@ import './Lobby.css';
 
 export default function Lobby({ user, onLogout, showToast }) {
     const [joinCode, setJoinCode] = useState('');
-    const [roomName, setRoomName] = useState('');
     const [currentRoomName, setCurrentRoomName] = useState('');
     const [startingPlayerId, setStartingPlayerId] = useState('');
     const [currentRoom, setCurrentRoom] = useState(null);
@@ -16,6 +15,13 @@ export default function Lobby({ user, onLogout, showToast }) {
     const [activeRooms, setActiveRooms] = useState([]);
     const [loading, setLoading] = useState(false);
     const [checkingRoom, setCheckingRoom] = useState(Boolean(user?.id));
+
+    // Navigace v postranním panelu a modální okno pro tvorbu laboratoře
+    const [activeNav, setActiveNav] = useState('lobby'); // 'lobby' | 'profile' | 'stats'
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [modalRoomName, setModalRoomName] = useState('');
+    const [modalIsPublic, setModalIsPublic] = useState(true);
 
     // Reference pro předcházení duplicitním notifikacím o schválení
     const prevStatusRef = useRef(null);
@@ -92,9 +98,11 @@ export default function Lobby({ user, onLogout, showToast }) {
         const fetchRooms = async () => {
             try {
                 // Supabase implicitní join přes cizí klíč host_id -> uzivatele(id)
+                // POUZE VEŘEJNÉ MÍSTNOSTI (.eq('is_public', true))
                 const { data, error } = await supabase
                     .from('rooms')
                     .select('*, uzivatele(prezdivka)')
+                    .eq('is_public', true)
                     .order('created_at', { ascending: false });
 
                 if (!isCancelled && !error && data) {
@@ -287,9 +295,9 @@ export default function Lobby({ user, onLogout, showToast }) {
     }, [currentRoom, notify]);
 
     // =========================================================
-    // 3. ZALOŽENÍ NOVÉ LABORATOŘE
+    // 3. ZALOŽENÍ NOVÉ LABORATOŘE (PŘES MODÁLNÍ OKNO)
     // =========================================================
-    const handleCreateRoom = async (e) => {
+    const handleCreateRoomSubmit = async (e) => {
         if (e && e.preventDefault) e.preventDefault();
 
         if (!user || !user.id || isNaN(Number(user.id))) {
@@ -300,9 +308,9 @@ export default function Lobby({ user, onLogout, showToast }) {
         setLoading(true);
         try {
             const newCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-            const formattedName = roomName.trim() || `Laboratoř ${newCode}`;
+            const formattedName = modalRoomName.trim() || `Laboratoř ${newCode}`;
 
-            // 1. Vložení místnosti do tabulky 'rooms' včetně nového sloupce room_name
+            // 1. Vložení místnosti do tabulky 'rooms' včetně room_name a is_public
             const { error: roomError } = await supabase
                 .from('rooms')
                 .insert([
@@ -311,7 +319,8 @@ export default function Lobby({ user, onLogout, showToast }) {
                         host_id: Number(user.id),
                         status: 'waiting',
                         game_status: 'waiting',
-                        room_name: formattedName
+                        room_name: formattedName,
+                        is_public: Boolean(modalIsPublic)
                     }
                 ]);
 
@@ -346,7 +355,10 @@ export default function Lobby({ user, onLogout, showToast }) {
             setIsHost(true);
             setCurrentRoom(newCode);
             setCurrentRoomName(formattedName);
-            setRoomName('');
+            setShowCreateModal(false);
+            setModalRoomName('');
+            setModalIsPublic(true);
+            setActiveNav('lobby');
             notify(`Laboratoř "${formattedName}" (${newCode}) byla úspěšně vytvořena.`, 'success');
         } catch (err) {
             console.error('Neočekávaná chyba při tvorbě místnosti:', err);
@@ -712,327 +724,552 @@ export default function Lobby({ user, onLogout, showToast }) {
     }
 
     // =========================================================
-    // UI: ČEKÁRNA PRO NEZCHVÁLENÉHO UČEDNÍKA (PENDING SCREEN)
+    // UI: HLAVNÍ ROZVRŽENÍ APLIKACE (POSTRANNÍ PANEL + OBSAH)
     // =========================================================
-    if (currentRoom && myPlayerStatus === 'pending') {
+    // Pokud hra již začala, zobrazíme herní desku GameBoard fullscreen
+    if (currentRoom && myPlayerStatus === 'approved' && (roomStatus === 'playing' || roomStatus === 'finished')) {
         return (
-            <div className="lobby-wrapper">
-                <div className="lobby-card">
-                    <div className="room-header">
-                        <div className="room-status-badge pending-badge">Čekání na schválení</div>
-                        <div className="room-code-tag">{currentRoom}</div>
-                        <h3 className="pending-title">Čekám na schválení správcem...</h3>
-                        <p className="pending-desc">
-                            Správce laboratoře obdržel tvoji žádost. Vyčkej, dokud ti neodemkne vstup k alchymistickému stolu.
-                        </p>
-                    </div>
-
-                    <div className="room-actions">
-                        <button 
-                            type="button" 
-                            onClick={handleLeaveRoom}
-                            className="btn-leave"
-                        >
-                            Zrušit žádost
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <GameBoard
+                roomCode={currentRoom}
+                roomName={currentRoomName}
+                user={user}
+                isHost={isHost}
+                players={approvedPlayers}
+                onLeaveRoom={handleLeaveRoom}
+                showToast={showToast}
+            />
         );
     }
 
-    // =========================================================
-    // UI: VNITŘEK LABORATOŘE (SCHVÁLENÝ HRÁČ / SPRÁVCE)
-    // =========================================================
-    if (currentRoom && myPlayerStatus === 'approved') {
-        // Pokud hra již začala, zobrazíme herní desku GameBoard
-        if (roomStatus === 'playing' || roomStatus === 'finished') {
-            return (
-                <GameBoard
-                    roomCode={currentRoom}
-                    roomName={currentRoomName}
-                    user={user}
-                    isHost={isHost}
-                    players={approvedPlayers}
-                    onLeaveRoom={handleLeaveRoom}
-                    showToast={showToast}
-                />
-            );
-        }
+    return (
+        <div className="app-layout">
+            {/* Mobilní lišta s Hamburger menu */}
+            <header className="mobile-header">
+                <button
+                    type="button"
+                    onClick={() => setSidebarOpen((prev) => !prev)}
+                    className="btn-hamburger"
+                    aria-label="Otevřít navigaci"
+                >
+                    {sidebarOpen ? '✕' : '☰'}
+                </button>
+                <div className="mobile-brand">⚗️ BuchyBuch</div>
+                <div className="mobile-user-tag">{user.prezdivka}</div>
+            </header>
 
-        // Jinak zobrazíme čekárnu v laboratoři před spuštěním vaření
-        return (
-            <div className="lobby-wrapper">
-                <div className="lobby-card">
-                    <div className="room-header">
-                        <div className="room-code-label">Kód laboratoře</div>
-                        <div className="room-code-tag">{currentRoom}</div>
-                        {currentRoomName && (
-                            <h2 className="room-name-heading">{currentRoomName}</h2>
-                        )}
-                        <p className="room-share-hint">
-                            Sdílej tento kód s ostatními učedníky
-                        </p>
+            {/* Backdrop pro mobilní zobrazení */}
+            {sidebarOpen && (
+                <div
+                    className="sidebar-backdrop"
+                    onClick={() => setSidebarOpen(false)}
+                    aria-hidden="true"
+                />
+            )}
+
+            {/* Levý postranní panel */}
+            <aside className={`app-sidebar ${sidebarOpen ? 'is-open' : ''}`}>
+                <div className="sidebar-brand">
+                    <span className="brand-icon">⚗️</span>
+                    <div className="brand-text">
+                        <span className="brand-name">BuchyBuch</span>
+                        <span className="brand-sub">Ruská ruleta</span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setSidebarOpen(false)}
+                        className="btn-close-sidebar-mobile"
+                        aria-label="Zavřít menu"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <nav className="sidebar-nav">
+                    <button
+                        type="button"
+                        className={`nav-item ${activeNav === 'lobby' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActiveNav('lobby');
+                            setSidebarOpen(false);
+                        }}
+                    >
+                        <span className="nav-icon">⚗️</span>
+                        <span className="nav-label">Laboratoř</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        className={`nav-item ${activeNav === 'profile' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActiveNav('profile');
+                            setSidebarOpen(false);
+                        }}
+                    >
+                        <span className="nav-icon">👤</span>
+                        <span className="nav-label">Můj Profil</span>
+                        <span className="nav-badge-wip">Připravujeme</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        className={`nav-item ${activeNav === 'stats' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActiveNav('stats');
+                            setSidebarOpen(false);
+                        }}
+                    >
+                        <span className="nav-icon">📊</span>
+                        <span className="nav-label">Statistiky</span>
+                        <span className="nav-badge-wip">Připravujeme</span>
+                    </button>
+                </nav>
+
+                {/* Spodní část panelu: Profil přihlášeného hráče a Odhlášení */}
+                <div className="sidebar-footer">
+                    <div className="sidebar-user-card">
+                        <div className="sidebar-avatar">
+                            {user.isGuest ? '🧪' : '🧙'}
+                        </div>
+                        <div className="sidebar-user-details">
+                            <span className="sidebar-user-name">{user.prezdivka}</span>
+                            <span className="sidebar-user-role">
+                                {user.isGuest ? 'Host' : 'Učedník'}
+                            </span>
+                        </div>
                     </div>
 
-                    {/* Sekce čekajících učedníků pro hosta */}
-                    {isHost && (
-                        <div className="room-pending-box">
-                            <div className="room-players-header">
-                                <h3>Čekající učedníci ({pendingPlayers.length})</h3>
-                                {pendingPlayers.length > 0 && (
-                                    <span className="badge-pending-count">Žádosti</span>
+                    {onLogout && (
+                        <button
+                            type="button"
+                            onClick={handleLogoutClick}
+                            className="btn-sidebar-logout"
+                        >
+                            Odhlásit se
+                        </button>
+                    )}
+                </div>
+            </aside>
+
+            {/* Hlavní obsahová část */}
+            <main className="layout-content">
+                {activeNav === 'profile' && (
+                    <div className="placeholder-view">
+                        <div className="placeholder-card">
+                            <div className="placeholder-icon">👤</div>
+                            <h2>Můj Profil</h2>
+                            <span className="badge-coming-soon">Připravujeme</span>
+                            <div className="profile-details-preview">
+                                <div className="profile-row">
+                                    <span>Přezdívka:</span>
+                                    <strong>{user.prezdivka}</strong>
+                                </div>
+                                <div className="profile-row">
+                                    <span>Role:</span>
+                                    <strong>{user.isGuest ? 'Host' : 'Učedník'}</strong>
+                                </div>
+                                {user.email && (
+                                    <div className="profile-row">
+                                        <span>E-mail:</span>
+                                        <strong>{user.email}</strong>
+                                    </div>
                                 )}
                             </div>
-
-                            {pendingPlayers.length === 0 ? (
-                                <p className="empty-subtext">Žádné nevyřízené žádosti o vstup.</p>
-                            ) : (
-                                <ul className="pending-list">
-                                    {pendingPlayers.map((p) => {
-                                        const playerName = p.uzivatele?.prezdivka || 'Učedník';
-                                        return (
-                                            <li key={p.id} className="pending-item">
-                                                <div className="pending-item-info">
-                                                    <span className="pending-name">{playerName}</span>
-                                                    {p.is_guest && <span className="badge-guest">Host</span>}
-                                                </div>
-                                                <div className="pending-item-actions">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleApprovePlayer(p)}
-                                                        className="btn-approve"
-                                                        title="Povolit vstup"
-                                                    >
-                                                        Schválit
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRejectPlayer(p)}
-                                                        className="btn-reject"
-                                                        title="Odmítnout žádost"
-                                                    >
-                                                        Odmítnout
-                                                    </button>
-                                                </div>
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Učedníci u kotlíku v místnosti */}
-                    <div className="room-players-box">
-                        <div className="room-players-header">
-                            <h3>Učedníci u kotlíku ({approvedPlayers.length})</h3>
-                            <span className="realtime-pill">Realtime</span>
-                        </div>
-
-                        <ul className="player-list">
-                            {approvedPlayers.map((p) => {
-                                const isMe = Number(p.player_id) === Number(user.id);
-                                const playerName = p.uzivatele?.prezdivka || 'Alchymista';
-                                return (
-                                    <li key={p.id || p.player_id} className="player-item">
-                                        <span>
-                                            {p.is_host ? '👑 ' : ''}
-                                            {playerName}
-                                            {isMe && <span className="player-me">(Ty)</span>}
-                                        </span>
-                                        <div className="player-item-meta">
-                                            {p.is_guest && <span className="badge-guest">Host</span>}
-                                            {isHost && !isMe && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleKickPlayer(p)}
-                                                    className="btn-kick"
-                                                    title={`Vykopnout hráče ${playerName}`}
-                                                    aria-label={`Vykopnout hráče ${playerName}`}
-                                                >
-                                                    ❌
-                                                </button>
-                                            )}
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-
-                        {isHost && (
-                            <p className="host-role-notice">Jsi správcem této laboratoře.</p>
-                        )}
-                    </div>
-
-                    {/* Volba začínajícího hráče pro hosta */}
-                    {isHost && approvedPlayers.length >= 2 && (
-                        <div className="starting-player-box">
-                            <label htmlFor="starting-player-select" className="starting-player-label">
-                                🎲 Začínající hráč:
-                            </label>
-                            <div className="starting-player-controls">
-                                <select
-                                    id="starting-player-select"
-                                    value={startingPlayerId || (approvedPlayers[0] ? String(approvedPlayers[0].player_id) : '')}
-                                    onChange={(e) => setStartingPlayerId(e.target.value)}
-                                    className="starting-player-select"
-                                    aria-label="Výběr začínajícího hráče"
-                                >
-                                    {approvedPlayers.map((p) => {
-                                        const pName = p.uzivatele?.prezdivka || 'Alchymista';
-                                        const isMe = Number(p.player_id) === Number(user.id);
-                                        return (
-                                            <option key={p.id || p.player_id} value={String(p.player_id)}>
-                                                {pName} {isMe ? '(Ty / Host)' : ''}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                                <button
-                                    type="button"
-                                    onClick={handleSelectRandomPlayer}
-                                    className="btn-random-player"
-                                    title="Vybrat začínajícího hráče náhodně"
-                                >
-                                    Vybrat náhodně
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="room-actions">
-                        {isHost && approvedPlayers.filter((p) => Number(p.player_id) !== Number(user.id)).length >= 1 && (
+                            <p className="placeholder-hint">
+                                Možnost změny avataru, přezdívky a herních preferencí bude brzy dostupná.
+                            </p>
                             <button
                                 type="button"
-                                onClick={handleStartGame}
-                                className="btn-start-game"
+                                onClick={() => setActiveNav('lobby')}
+                                className="btn-back-to-lobby"
                             >
-                                Zahájit hru
+                                ← Zpět do laboratoře
                             </button>
-                        )}
-
-                        <button 
-                            type="button" 
-                            onClick={handleLeaveRoom}
-                            className="btn-leave"
-                        >
-                            Opustit laboratoř
-                        </button>
+                        </div>
                     </div>
-                </div>
-            </div>
-        );
-    }
-
-    // =========================================================
-    // UI: HLAVNÍ NABÍDKA LOBBY (VÝBĚR MÍSTNOSTI / ZALOŽENÍ)
-    // =========================================================
-    return (
-        <div className="lobby-wrapper">
-            <div className="lobby-topbar">
-                <div className="lobby-user-info">
-                    <span>Hráč:</span>
-                    <span className="lobby-user-name">{user.prezdivka}</span>
-                    {user.isGuest && <span className="badge-guest">Host</span>}
-                </div>
-
-                {onLogout && (
-                    <button 
-                        type="button"
-                        onClick={handleLogoutClick}
-                        className="btn-logout"
-                    >
-                        Odhlásit se
-                    </button>
                 )}
-            </div>
 
-            <div className="lobby-card">
-                <h2 className="lobby-title">Alchymistická dílna</h2>
-                <p className="lobby-subtitle">Vyber si aktivní laboratoř ze seznamu, zadej PIN nebo založ novou.</p>
-
-                <form onSubmit={handleCreateRoom} className="create-room-form">
-                    <input 
-                        type="text" 
-                        placeholder="Název laboratoře (např. Temná komnata)" 
-                        value={roomName}
-                        onChange={(e) => setRoomName(e.target.value)}
-                        disabled={loading}
-                        className="room-name-input"
-                        aria-label="Název laboratoře"
-                        maxLength={40}
-                    />
-                    <button 
-                        type="submit"
-                        disabled={loading}
-                        className="btn-create-room"
-                    >
-                        {loading ? 'Vytvářím...' : 'Založit novou laboratoř'}
-                    </button>
-                </form>
-
-                <div className="join-section">
-                    <form onSubmit={handleJoinFormSubmit} className="join-form">
-                        <input 
-                            type="text" 
-                            placeholder="PIN KÓD" 
-                            value={joinCode}
-                            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                            maxLength={6}
-                            disabled={loading}
-                            className="pin-input"
-                            aria-label="Kód laboratoře"
-                        />
-                        <button 
-                            type="submit" 
-                            disabled={loading || !joinCode}
-                            className="btn-join"
-                        >
-                            Připojit se
-                        </button>
-                    </form>
-                </div>
-
-                {/* Seznam aktivních laboratoří v reálném čase */}
-                <div className="active-rooms-section">
-                    <div className="active-rooms-header">
-                        <h3>Aktivní laboratoře ({activeRooms.length})</h3>
-                        <span className="realtime-pill">Live</span>
+                {activeNav === 'stats' && (
+                    <div className="placeholder-view">
+                        <div className="placeholder-card">
+                            <div className="placeholder-icon">📊</div>
+                            <h2>Statistiky</h2>
+                            <span className="badge-coming-soon">Připravujeme</span>
+                            <div className="stats-preview-grid">
+                                <div className="stat-box">
+                                    <span className="stat-num">-</span>
+                                    <span className="stat-label">Odehrané hry</span>
+                                </div>
+                                <div className="stat-box">
+                                    <span className="stat-num">-</span>
+                                    <span className="stat-label">Výhry</span>
+                                </div>
+                                <div className="stat-box">
+                                    <span className="stat-num">-</span>
+                                    <span className="stat-label">Přežití</span>
+                                </div>
+                            </div>
+                            <p className="placeholder-hint">
+                                Sledování tvých úspěchů u kotlíku a žebříčky alchymistů připravujeme.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setActiveNav('lobby')}
+                                className="btn-back-to-lobby"
+                            >
+                                ← Zpět do laboratoře
+                            </button>
+                        </div>
                     </div>
+                )}
 
-                    {activeRooms.length === 0 ? (
-                        <p className="empty-rooms-text">Aktuálně není otevřena žádná laboratoř. Buď první!</p>
-                    ) : (
-                        <ul className="active-rooms-list">
-                            {activeRooms.map((room) => {
-                                const hostDisplayName = room.uzivatele?.prezdivka || 'Neznámý';
-                                return (
-                                    <li key={room.id || room.room_code} className="active-room-item">
-                                        <div className="active-room-info">
-                                            <div className="active-room-code">{room.room_code}</div>
-                                            {room.room_name && (
-                                                <div className="active-room-name">{room.room_name}</div>
-                                            )}
-                                            <div className="active-room-host">
-                                                Správce: <strong>{hostDisplayName}</strong>
-                                            </div>
-                                        </div>
+                {activeNav === 'lobby' && (
+                    <>
+                        {/* 1. Čekání na schválení vstupu do laboratoře */}
+                        {currentRoom && myPlayerStatus === 'pending' && (
+                            <div className="lobby-wrapper">
+                                <div className="lobby-card">
+                                    <div className="room-header">
+                                        <div className="room-status-badge pending-badge">Čekání na schválení</div>
+                                        <div className="room-code-tag">{currentRoom}</div>
+                                        <h3 className="pending-title">Čekám na schválení správcem...</h3>
+                                        <p className="pending-desc">
+                                            Správce laboratoře obdržel tvoji žádost. Vyčkej, dokud ti neodemkne vstup k alchymistickému stolu.
+                                        </p>
+                                    </div>
+                                    <div className="room-actions">
                                         <button
                                             type="button"
-                                            disabled={loading}
-                                            onClick={() => joinLaboratoryByCode(room.room_code)}
-                                            className="btn-room-enter"
+                                            onClick={handleLeaveRoom}
+                                            className="btn-leave"
                                         >
-                                            Požádat o vstup
+                                            Zrušit žádost
                                         </button>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 2. Čekárna laboratoře (schválený hráč / správce) */}
+                        {currentRoom && myPlayerStatus === 'approved' && (
+                            <div className="lobby-wrapper">
+                                <div className="lobby-card">
+                                    <div className="room-header">
+                                        <div className="room-code-label">Kód laboratoře</div>
+                                        <div className="room-code-tag">{currentRoom}</div>
+                                        {currentRoomName && (
+                                            <h2 className="room-name-heading">{currentRoomName}</h2>
+                                        )}
+                                        <p className="room-share-hint">
+                                            Sdílej tento kód s ostatními učedníky
+                                        </p>
+                                    </div>
+
+                                    {/* Sekce čekajících učedníků pro hosta */}
+                                    {isHost && (
+                                        <div className="room-pending-box">
+                                            <div className="room-players-header">
+                                                <h3>Čekající učedníci ({pendingPlayers.length})</h3>
+                                                {pendingPlayers.length > 0 && (
+                                                    <span className="badge-pending-count">Žádosti</span>
+                                                )}
+                                            </div>
+
+                                            {pendingPlayers.length === 0 ? (
+                                                <p className="empty-subtext">Žádné nevyřízené žádosti o vstup.</p>
+                                            ) : (
+                                                <ul className="pending-list">
+                                                    {pendingPlayers.map((p) => {
+                                                        const playerName = p.uzivatele?.prezdivka || 'Učedník';
+                                                        return (
+                                                            <li key={p.id} className="pending-item">
+                                                                <div className="pending-item-info">
+                                                                    <span className="pending-name">{playerName}</span>
+                                                                    {p.is_guest && <span className="badge-guest">Host</span>}
+                                                                </div>
+                                                                <div className="pending-item-actions">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleApprovePlayer(p)}
+                                                                        className="btn-approve"
+                                                                        title="Povolit vstup"
+                                                                    >
+                                                                        Schválit
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleRejectPlayer(p)}
+                                                                        className="btn-reject"
+                                                                        title="Odmítnout žádost"
+                                                                    >
+                                                                        Odmítnout
+                                                                    </button>
+                                                                </div>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Učedníci u kotlíku v místnosti */}
+                                    <div className="room-players-box">
+                                        <div className="room-players-header">
+                                            <h3>Učedníci u kotlíku ({approvedPlayers.length})</h3>
+                                            <span className="realtime-pill">Realtime</span>
+                                        </div>
+
+                                        <ul className="player-list">
+                                            {approvedPlayers.map((p) => {
+                                                const isMe = Number(p.player_id) === Number(user.id);
+                                                const playerName = p.uzivatele?.prezdivka || 'Alchymista';
+                                                return (
+                                                    <li key={p.id || p.player_id} className="player-item">
+                                                        <span>
+                                                            {p.is_host ? '👑 ' : ''}
+                                                            {playerName}
+                                                            {isMe && <span className="player-me">(Ty)</span>}
+                                                        </span>
+                                                        <div className="player-item-meta">
+                                                            {p.is_guest && <span className="badge-guest">Host</span>}
+                                                            {isHost && !isMe && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleKickPlayer(p)}
+                                                                    className="btn-kick"
+                                                                    title={`Vykopnout hráče ${playerName}`}
+                                                                    aria-label={`Vykopnout hráče ${playerName}`}
+                                                                >
+                                                                    ❌
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+
+                                        {isHost && (
+                                            <p className="host-role-notice">Jsi správcem této laboratoře.</p>
+                                        )}
+                                    </div>
+
+                                    {/* Volba začínajícího hráče pro hosta */}
+                                    {isHost && approvedPlayers.length >= 2 && (
+                                        <div className="starting-player-box">
+                                            <label htmlFor="starting-player-select" className="starting-player-label">
+                                                🎲 Začínající hráč:
+                                            </label>
+                                            <div className="starting-player-controls">
+                                                <select
+                                                    id="starting-player-select"
+                                                    value={startingPlayerId || (approvedPlayers[0] ? String(approvedPlayers[0].player_id) : '')}
+                                                    onChange={(e) => setStartingPlayerId(e.target.value)}
+                                                    className="starting-player-select"
+                                                    aria-label="Výběr začínajícího hráče"
+                                                >
+                                                    {approvedPlayers.map((p) => {
+                                                        const pName = p.uzivatele?.prezdivka || 'Alchymista';
+                                                        const isMe = Number(p.player_id) === Number(user.id);
+                                                        return (
+                                                            <option key={p.id || p.player_id} value={String(p.player_id)}>
+                                                                {pName} {isMe ? '(Ty / Host)' : ''}
+                                                            </option>
+                                                        );
+                                                    })}
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSelectRandomPlayer}
+                                                    className="btn-random-player"
+                                                    title="Vybrat začínajícího hráče náhodně"
+                                                >
+                                                    Vybrat náhodně
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="room-actions">
+                                        {isHost && approvedPlayers.filter((p) => Number(p.player_id) !== Number(user.id)).length >= 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={handleStartGame}
+                                                className="btn-start-game"
+                                            >
+                                                Zahájit hru
+                                            </button>
+                                        )}
+
+                                        <button 
+                                            type="button" 
+                                            onClick={handleLeaveRoom}
+                                            className="btn-leave"
+                                        >
+                                            Opustit laboratoř
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 3. Vyčištěné Lobby (bez nadpisů, bez volného inputu, s tlačítkem otevírajícím modal) */}
+                        {!currentRoom && (
+                            <div className="lobby-wrapper">
+                                <div className="lobby-card">
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setModalRoomName('');
+                                            setModalIsPublic(true);
+                                            setShowCreateModal(true);
+                                        }}
+                                        disabled={loading}
+                                        className="btn-create-room"
+                                    >
+                                        + Založit novou laboratoř
+                                    </button>
+
+                                    <div className="join-section">
+                                        <form onSubmit={handleJoinFormSubmit} className="join-form">
+                                            <input 
+                                                type="text" 
+                                                placeholder="PIN KÓD" 
+                                                value={joinCode}
+                                                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                                                maxLength={6}
+                                                disabled={loading}
+                                                className="pin-input"
+                                                aria-label="Kód laboratoře"
+                                            />
+                                            <button 
+                                                type="submit" 
+                                                disabled={loading || !joinCode}
+                                                className="btn-join"
+                                            >
+                                                Připojit se
+                                            </button>
+                                        </form>
+                                    </div>
+
+                                    {/* Seznam aktivních laboratoří v reálném čase */}
+                                    <div className="active-rooms-section">
+                                        <div className="active-rooms-header">
+                                            <h3>Aktivní laboratoře ({activeRooms.length})</h3>
+                                            <span className="realtime-pill">Live</span>
+                                        </div>
+
+                                        {activeRooms.length === 0 ? (
+                                            <p className="empty-rooms-text">Aktuálně není otevřena žádná veřejná laboratoř. Založ novou!</p>
+                                        ) : (
+                                            <ul className="active-rooms-list">
+                                                {activeRooms.map((room) => {
+                                                    const hostDisplayName = room.uzivatele?.prezdivka || 'Neznámý';
+                                                    return (
+                                                        <li key={room.id || room.room_code} className="active-room-item">
+                                                            <div className="active-room-info">
+                                                                <div className="active-room-code">{room.room_code}</div>
+                                                                {room.room_name && (
+                                                                    <div className="active-room-name">{room.room_name}</div>
+                                                                )}
+                                                                <div className="active-room-host">
+                                                                    Správce: <strong>{hostDisplayName}</strong>
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                disabled={loading}
+                                                                onClick={() => joinLaboratoryByCode(room.room_code)}
+                                                                className="btn-room-enter"
+                                                            >
+                                                                Požádat o vstup
+                                                            </button>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </main>
+
+            {/* Modální okno pro založení nové laboratoře */}
+            {showCreateModal && (
+                <div className="modal-overlay" role="dialog" aria-modal="true">
+                    <div className="modal-card">
+                        <div className="modal-header">
+                            <h3 className="modal-title">Založit novou laboratoř</h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowCreateModal(false)}
+                                className="btn-modal-close"
+                                aria-label="Zavřít okno"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateRoomSubmit} className="modal-form">
+                            <div className="modal-form-group">
+                                <label htmlFor="modal-room-name" className="modal-label">
+                                    Název laboratoře
+                                </label>
+                                <input
+                                    id="modal-room-name"
+                                    type="text"
+                                    placeholder="Např. Temná komnata"
+                                    value={modalRoomName}
+                                    onChange={(e) => setModalRoomName(e.target.value)}
+                                    disabled={loading}
+                                    className="modal-input"
+                                    maxLength={40}
+                                    autoFocus
+                                />
+                            </div>
+
+                            <div className="modal-form-group checkbox-group">
+                                <label className="modal-checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={modalIsPublic}
+                                        onChange={(e) => setModalIsPublic(e.target.checked)}
+                                        disabled={loading}
+                                        className="modal-checkbox"
+                                    />
+                                    <span>Viditelná v seznamu laboratoří</span>
+                                </label>
+                                <p className="modal-hint">
+                                    {modalIsPublic
+                                        ? 'Laboratoř bude veřejná a zobrazí se v živém seznamu.'
+                                        : 'Soukromá laboratoř. Vstup je možný pouze přes PIN kód.'}
+                                </p>
+                            </div>
+
+                            <div className="modal-actions">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCreateModal(false)}
+                                    disabled={loading}
+                                    className="btn-modal-cancel"
+                                >
+                                    Zrušit
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="btn-modal-create"
+                                >
+                                    {loading ? 'Vytvářím...' : 'Vytvořit'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }
