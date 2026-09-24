@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import './GameBoard.css';
 
-export default function GameBoard({ roomCode, user, isHost, players: initialPlayers = [], onLeaveRoom, showToast }) {
+export default function GameBoard({ roomCode, roomName, user, isHost, players: initialPlayers = [], onLeaveRoom, showToast }) {
     // Seznam hráčů v místnosti (udržovaný v reálném čase)
     const [players, setPlayers] = useState(initialPlayers);
 
@@ -383,7 +383,7 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                             // Notifikace, pokud tah právě přešel na mě
                             const myId = Number(userRef.current?.id);
                             if (newTurnId === myId && prevTurnPlayerIdRef.current !== myId) {
-                                notifyRef.current?.('Jsi na tahu! Lízej kartu.', 'info');
+                                notifyRef.current?.('Jsi na tahu!', 'info');
                             }
                             prevTurnPlayerIdRef.current = newTurnId;
                         }
@@ -450,11 +450,16 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
     const currentTurnPlayer = players.find((p) => Number(p.player_id) === Number(currentTurnPlayerId));
     const currentTurnPlayerName = currentTurnPlayer?.uzivatele?.prezdivka || 'Soupeř';
 
+    // Určení vítěze (jediný hráč v room_players, který má is_dead === false)
+    const winnerPlayer = alivePlayers.length === 1 ? alivePlayers[0] : (alivePlayers[0] || null);
+    const winnerName = winnerPlayer?.uzivatele?.prezdivka || 'Přeživší alchymista';
+    const isMeWinner = winnerPlayer && Number(winnerPlayer.player_id) === Number(user.id);
+
     // =========================================================
-    // HERNÍ LOGIKA: LÍZNUTÍ KARTY (RUSKÁ RULETA)
+    // HERNÍ LOGIKA: LÍZNUTÍ KARTY (KLIK NUTÍ NA BALÍČEK)
     // =========================================================
     const handleDrawCard = async () => {
-        // Kontrola oprávnění: pouze hráč na tahu, nesmí být mrtvý, hra nesmí být u konce
+        // Kontrola oprávnění: pouze hráč na tahu, nesmí být mrtev, hra nesmí být u konce
         if (!isMyTurn || isMeDead || gameStatus === 'finished' || isDrawing) {
             return;
         }
@@ -577,38 +582,37 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
         }
     };
 
-    // Restart hry správcem místnosti (Host action)
-    const handleRestartGame = async () => {
+    // =========================================================
+    // NÁVRAT DO LABORATOŘE (HOST ACTION PO SKONČENÍ HRY)
+    // =========================================================
+    const handleResetToLobby = async () => {
         if (!isHostRef.current) return;
         try {
-            const newDeck = [...Array(25).fill('safe'), ...Array(2).fill('killer')];
-            for (let i = newDeck.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
-            }
-
-            const hostPlayerId = Number(user.id);
-
+            // 1. Nastaví všem is_dead = false
             await supabase
                 .from('room_players')
                 .update({ is_dead: false })
                 .eq('room_code', roomCode);
 
-            await supabase
+            // 2. Vymaže balíček a změní status na waiting
+            const { error } = await supabase
                 .from('rooms')
                 .update({
-                    deck: newDeck,
-                    game_status: 'playing',
-                    status: 'playing',
-                    current_turn_player_id: hostPlayerId
+                    deck: null,
+                    game_status: 'waiting',
+                    status: 'waiting',
+                    current_turn_player_id: null
                 })
                 .eq('room_code', roomCode);
 
-            notify('Nová hra byla zahájena! Začínáš na tahu.', 'success');
-            addLog('Správce zahájil novou hru! Karty byly zamíchány.', 'system');
+            if (error) {
+                notify('Nepodařilo se resetovat hru: ' + error.message, 'error');
+            } else {
+                notify('Hra byla zresetována, návrat do laboratoře.', 'info');
+            }
         } catch (err) {
-            console.error('Chyba při restartu hry:', err);
-            notify('Nepodařilo se restartovat hru.', 'error');
+            console.error('Chyba při resetování laboratoře:', err);
+            notify('Chyba při návratu do laboratoře.', 'error');
         }
     };
 
@@ -619,6 +623,7 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                 <div className="gameboard-room-info">
                     <span>Laboratoř:</span>
                     <span className="gameboard-room-code">{roomCode}</span>
+                    {roomName && <span className="gameboard-room-name">{roomName}</span>}
                     {isHost && <span className="badge-host-crown">👑 Správce</span>}
                 </div>
 
@@ -694,86 +699,47 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                         )}
                     </section>
 
-                    {/* 2. Středová zóna: Balíček a akční tlačítko Líznout kartu */}
-                    <section className="roulette-center-zone" aria-label="Ruská ruleta">
+                    {/* 2. Středová zóna: Balíček (klikací Tajemná karta pro hráče na tahu) */}
+                    <section className="roulette-center-zone" aria-label="Společný kotlík">
                         <div className="roulette-frame">
                             <div className="roulette-header">
                                 <span className="roulette-title">
-                                    <span className="roulette-icon">⚗️</span> Ruská ruleta
+                                    <span className="roulette-icon">⚗️</span> Společný kotlík
                                 </span>
                                 <span className="roulette-deck-count">
                                     🂠 {deck.length} karet v balíčku
                                 </span>
                             </div>
 
-                            {/* Vizuál balíčku karet */}
+                            {/* Vizuál balíčku karet s přímou klikací událostí */}
                             <div className="roulette-deck-display">
-                                <div className={`roulette-card-stack ${gameStatus === 'finished' ? 'card-finished' : isMyTurn && !isMeDead ? 'card-my-turn' : ''}`}>
+                                <div
+                                    className={`roulette-card-stack ${isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'is-clickable is-my-turn' : 'not-clickable'} ${isDrawing ? 'is-drawing' : ''}`}
+                                    onClick={isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing ? handleDrawCard : undefined}
+                                    role={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'button' : undefined}
+                                    tabIndex={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 0 : undefined}
+                                    title={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'Klikni pro líznutí karty' : undefined}
+                                >
                                     <div className="card-layer layer-back-2"></div>
                                     <div className="card-layer layer-back-1"></div>
                                     <div className="card-layer layer-front">
-                                        <div className="card-sigil">
-                                            {gameStatus === 'finished' ? '☠️' : isMyTurn && !isMeDead ? '✨' : '🔮'}
-                                        </div>
-                                        <div className="card-label">
-                                            {gameStatus === 'finished' ? 'OSUD NAPLNĚN' : 'TAJEMNÁ KARTA'}
-                                        </div>
+                                        <div className="card-sigil">✨</div>
+                                        <div className="card-label">TAJEMNÁ KARTA</div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Tlačítko Líznout kartu (aktivní POUZE pokud je hráč na tahu) */}
-                            <div className="roulette-controls">
-                                <button
-                                    type="button"
-                                    className={`btn-draw-card ${isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'active' : 'disabled'}`}
-                                    disabled={!isMyTurn || isMeDead || gameStatus === 'finished' || isDrawing}
-                                    onClick={handleDrawCard}
-                                >
-                                    {isDrawing ? (
-                                        'Lízám kartu...'
-                                    ) : isMyTurn && !isMeDead && gameStatus !== 'finished' ? (
-                                        '🃏 Líznout kartu'
-                                    ) : gameStatus === 'finished' ? (
-                                        'Hra skončila'
-                                    ) : isMeDead ? (
-                                        'Byl jsi vyřazen 💀'
-                                    ) : (
-                                        'Hraje soupeř...'
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* Informační stavový řádek */}
+                            {/* Informační stavový řádek – bez duplicitních nápověd */}
                             <div className="roulette-status-info">
-                                {gameStatus === 'finished' ? (
-                                    <div className="roulette-finished-box">
-                                        <p className="finished-text">
-                                            ☠️ Hra skončila! Byla vytažena smrtící karta.
-                                        </p>
-                                        {isHost && (
-                                            <button
-                                                type="button"
-                                                onClick={handleRestartGame}
-                                                className="btn-restart-action"
-                                            >
-                                                🔄 Začít novou hru
-                                            </button>
-                                        )}
-                                    </div>
-                                ) : isMeDead ? (
+                                {isMeDead ? (
                                     <p className="status-note dead">
-                                        💀 Vytáhl jsi smrtící kartu a byl jsi vyřazen ze hry. Sleduj dohrání.
+                                        💀 Byl jsi vyřazen smrtící kartou. Sleduj dohrání.
                                     </p>
-                                ) : isMyTurn ? (
-                                    <p className="status-note my-turn">
-                                        🟢 Jsi na tahu! Lízej kartu z balíčku a pokus své štěstí.
-                                    </p>
-                                ) : (
+                                ) : !isMyTurn ? (
                                     <p className="status-note waiting">
                                         ⏳ Na tahu je {currentTurnPlayerName}...
                                     </p>
-                                )}
+                                ) : null}
                             </div>
                         </div>
                     </section>
@@ -783,28 +749,16 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                         <div className={`my-card ${isMyTurn && !isMeDead ? 'is-turn' : ''} ${isMeDead ? 'is-dead' : ''}`}>
                             <div className="my-card-header">
                                 <div className="my-name-wrap">
-                                    {isMyTurn && !isMeDead && <span className="turn-dot-pulse"></span>}
+                                    {isMyTurn && !isMeDead && <span className="turn-dot-pulse" title="Na tahu"></span>}
                                     <span className={`my-name ${isMeDead ? 'text-dead' : ''}`}>
                                         {user.prezdivka} (Ty)
                                     </span>
                                     {isHost && <span className="host-badge">👑 Správce</span>}
                                 </div>
 
-                                {isMeDead ? (
+                                {isMeDead && (
                                     <span className="dead-tag">💀 VYŘAZEN</span>
-                                ) : isMyTurn ? (
-                                    <span className="turn-tag">🟢 JSI NA TAHU</span>
-                                ) : (
-                                    <span className="wait-tag">ČEKÁŠ NA SOUPEŘE</span>
                                 )}
-                            </div>
-
-                            <div className="my-card-desc">
-                                {isMeDead
-                                    ? '☠️ Osud ti nepřál, vytáhl jsi smrtící kartu.'
-                                    : isMyTurn
-                                    ? '🃏 Jsi na tahu – klikni na tlačítko uprostřed desky a lízni si kartu!'
-                                    : `⏳ Na tahu je ${currentTurnPlayerName}. Sleduj výsledek.`}
                             </div>
                         </div>
                     </section>
@@ -877,6 +831,50 @@ export default function GameBoard({ roomCode, user, isHost, players: initialPlay
                     </div>
                 </aside>
             </div>
+
+            {/* ========================================================= */}
+            {/* 5. MODAL OKNO KONCE HRY A VÍTĚZ                           */}
+            {/* ========================================================= */}
+            {gameStatus === 'finished' && (
+                <div className="game-over-modal-overlay" role="dialog" aria-modal="true">
+                    <div className="game-over-modal-card">
+                        <div className="game-over-trophy">
+                            {isMeWinner ? '🏆' : '👑'}
+                        </div>
+                        <h2 className="game-over-heading">Konec hry</h2>
+
+                        <div className="game-over-winner-box">
+                            <span className="game-over-winner-label">VÍTĚZ</span>
+                            <h1 className="game-over-winner-name">{winnerName}</h1>
+                            {isMeWinner && (
+                                <span className="badge-you-won">Přežil jsi zkoušku osudu!</span>
+                            )}
+                        </div>
+
+                        <div className="game-over-actions">
+                            {isHost ? (
+                                <button
+                                    type="button"
+                                    onClick={handleResetToLobby}
+                                    className="btn-return-lobby"
+                                >
+                                    Návrat do laboratoře
+                                </button>
+                            ) : (
+                                <p className="waiting-host-text">Čeká se na správce...</p>
+                            )}
+
+                            <button
+                                type="button"
+                                onClick={onLeaveRoom}
+                                className="btn-leave-permanently"
+                            >
+                                Opustit hru
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

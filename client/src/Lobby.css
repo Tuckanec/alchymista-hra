@@ -540,3 +540,104 @@
     background: rgba(239, 68, 68, 0.1);
     border-color: #ef4444;
 }
+
+/* Formulář pro založení nové laboratoře */
+.create-room-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.room-name-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    background: #121318;
+    border: 1px solid #2d2f3b;
+    border-radius: 6px;
+    color: #f3f4f6;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.room-name-input:focus {
+    border-color: #10b981;
+}
+
+.room-name-heading {
+    margin: 8px 0 4px 0;
+    font-size: 17px;
+    font-weight: 700;
+    color: #10b981;
+    letter-spacing: 0.5px;
+}
+
+.active-room-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f3f4f6;
+    margin-top: 2px;
+}
+
+/* Sekce volby začínajícího hráče v čekárně */
+.starting-player-box {
+    margin: 16px 0;
+    padding: 14px;
+    background: #14151c;
+    border: 1px solid #252835;
+    border-radius: 8px;
+    text-align: left;
+}
+
+.starting-player-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #9ca3af;
+    margin-bottom: 8px;
+}
+
+.starting-player-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.starting-player-select {
+    flex: 1;
+    padding: 8px 12px;
+    background: #1b1c24;
+    border: 1px solid #2e303e;
+    border-radius: 6px;
+    color: #f3f4f6;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.starting-player-select:focus {
+    border-color: #10b981;
+}
+
+.btn-random-player {
+    padding: 8px 14px;
+    background: #232532;
+    border: 1px solid #343748;
+    color: #e5e7eb;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.btn-random-player:hover {
+    background: #2c2e3e;
+    border-color: #10b981;
+    color: #10b981;
+}
+

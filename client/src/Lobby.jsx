@@ -5,6 +5,9 @@ import './Lobby.css';
 
 export default function Lobby({ user, onLogout, showToast }) {
     const [joinCode, setJoinCode] = useState('');
+    const [roomName, setRoomName] = useState('');
+    const [currentRoomName, setCurrentRoomName] = useState('');
+    const [startingPlayerId, setStartingPlayerId] = useState('');
     const [currentRoom, setCurrentRoom] = useState(null);
     const [isHost, setIsHost] = useState(false);
     const [myPlayerStatus, setMyPlayerStatus] = useState(null); // 'pending' | 'approved' | null
@@ -50,6 +53,18 @@ export default function Lobby({ user, onLogout, showToast }) {
                     setMyPlayerStatus(data.status);
                     setIsHost(!!data.is_host);
                     setCurrentRoom(data.room_code);
+
+                    // Načteme i název laboratoře
+                    const { data: roomData } = await supabase
+                        .from('rooms')
+                        .select('room_name')
+                        .eq('room_code', data.room_code)
+                        .maybeSingle();
+
+                    if (!isCancelled && roomData?.room_name) {
+                        setCurrentRoomName(roomData.room_name);
+                    }
+
                     notify(`Návrat do laboratoře ${data.room_code}.`, 'info');
                 }
             } catch (err) {
@@ -203,7 +218,7 @@ export default function Lobby({ user, onLogout, showToast }) {
             try {
                 const { data, error } = await supabase
                     .from('rooms')
-                    .select('status, game_status')
+                    .select('status, game_status, room_name')
                     .eq('room_code', currentRoom)
                     .maybeSingle();
 
@@ -211,6 +226,9 @@ export default function Lobby({ user, onLogout, showToast }) {
                     const st = data.game_status || data.status;
                     if (st) {
                         setRoomStatus(st);
+                    }
+                    if (data.room_name) {
+                        setCurrentRoomName(data.room_name);
                     }
                 }
             } catch (err) {
@@ -235,6 +253,9 @@ export default function Lobby({ user, onLogout, showToast }) {
                         const st = payload.new.game_status || payload.new.status;
                         if (st) {
                             setRoomStatus(st);
+                        }
+                        if (payload.new.room_name) {
+                            setCurrentRoomName(payload.new.room_name);
                         }
                     }
                 }
@@ -268,7 +289,9 @@ export default function Lobby({ user, onLogout, showToast }) {
     // =========================================================
     // 3. ZALOŽENÍ NOVÉ LABORATOŘE
     // =========================================================
-    const handleCreateRoom = async () => {
+    const handleCreateRoom = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+
         if (!user || !user.id || isNaN(Number(user.id))) {
             notify('Neplatná relace uživatele. Prosím obnov stránku (Ctrl+F5) a přihlas se znovu.', 'error');
             return;
@@ -277,15 +300,18 @@ export default function Lobby({ user, onLogout, showToast }) {
         setLoading(true);
         try {
             const newCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const formattedName = roomName.trim() || `Laboratoř ${newCode}`;
 
-            // 1. Vložení místnosti do tabulky 'rooms' (pouze host_id jako int8 cizí klíč)
+            // 1. Vložení místnosti do tabulky 'rooms' včetně nového sloupce room_name
             const { error: roomError } = await supabase
                 .from('rooms')
                 .insert([
                     {
                         room_code: newCode,
                         host_id: Number(user.id),
-                        status: 'waiting'
+                        status: 'waiting',
+                        game_status: 'waiting',
+                        room_name: formattedName
                     }
                 ]);
 
@@ -295,7 +321,7 @@ export default function Lobby({ user, onLogout, showToast }) {
                 return;
             }
 
-            // 2. Vložení zakladatele jako schváleného správce (pouze player_id jako int8 cizí klíč)
+            // 2. Vložení zakladatele jako schváleného správce
             const { error: playerError } = await supabase
                 .from('room_players')
                 .insert([
@@ -304,7 +330,8 @@ export default function Lobby({ user, onLogout, showToast }) {
                         player_id: Number(user.id),
                         is_guest: !!user.isGuest,
                         is_host: true,
-                        status: 'approved'
+                        status: 'approved',
+                        is_dead: false
                     }
                 ]);
 
@@ -318,7 +345,9 @@ export default function Lobby({ user, onLogout, showToast }) {
             setMyPlayerStatus('approved');
             setIsHost(true);
             setCurrentRoom(newCode);
-            notify(`Laboratoř ${newCode} byla úspěšně vytvořena.`, 'success');
+            setCurrentRoomName(formattedName);
+            setRoomName('');
+            notify(`Laboratoř "${formattedName}" (${newCode}) byla úspěšně vytvořena.`, 'success');
         } catch (err) {
             console.error('Neočekávaná chyba při tvorbě místnosti:', err);
             notify('Chyba spojení se Supabase.', 'error');
@@ -493,7 +522,19 @@ export default function Lobby({ user, onLogout, showToast }) {
     };
 
     // =========================================================
-    // 5c. ZAHÁJENÍ HRY (HOST ACTION) - RUSKÁ RULETA
+    // 5c. VÝBĚR NÁHODNÉHO ZAČÍNAJÍCÍHO HRÁČE
+    // =========================================================
+    const handleSelectRandomPlayer = () => {
+        if (approvedPlayers.length === 0) return;
+        const randomIndex = Math.floor(Math.random() * approvedPlayers.length);
+        const chosen = approvedPlayers[randomIndex];
+        setStartingPlayerId(String(chosen.player_id));
+        const chosenName = chosen.uzivatele?.prezdivka || 'Učedník';
+        notify(`Začínající hráč náhodně vybrán: ${chosenName}`, 'info');
+    };
+
+    // =========================================================
+    // 5d. ZAHÁJENÍ HRY (HOST ACTION)
     // =========================================================
     const handleStartGame = async () => {
         if (!isHost || !currentRoom) return;
@@ -516,7 +557,11 @@ export default function Lobby({ user, onLogout, showToast }) {
                 [deck[i], deck[j]] = [deck[j], deck[i]];
             }
 
-            const hostPlayerId = Number(user.id);
+            // Určení začínajícího hráče: ID z dropdownu nebo ID hosta
+            let chosenPlayerId = Number(startingPlayerId);
+            if (!chosenPlayerId || !approvedPlayers.some((p) => Number(p.player_id) === chosenPlayerId)) {
+                chosenPlayerId = Number(user.id);
+            }
 
             // Reset is_dead pro všechny schválené hráče
             await supabase
@@ -524,14 +569,14 @@ export default function Lobby({ user, onLogout, showToast }) {
                 .update({ is_dead: false })
                 .eq('room_code', currentRoom);
 
-            // Update tabulky rooms: ulož zamíchané pole do deck, game_status = 'playing', current_turn_player_id = host
+            // Update tabulky rooms: ulož zamíchané pole do deck, game_status = 'playing', current_turn_player_id
             const { error } = await supabase
                 .from('rooms')
                 .update({
                     deck,
                     game_status: 'playing',
                     status: 'playing',
-                    current_turn_player_id: hostPlayerId
+                    current_turn_player_id: chosenPlayerId
                 })
                 .eq('room_code', currentRoom);
 
@@ -539,7 +584,9 @@ export default function Lobby({ user, onLogout, showToast }) {
                 notify('Nepodařilo se zahájit hru: ' + error.message, 'error');
             } else {
                 setRoomStatus('playing');
-                notify('Hra byla zahájena! Začínáš na tahu.', 'success');
+                const startingPlayer = approvedPlayers.find((p) => Number(p.player_id) === chosenPlayerId);
+                const startingName = startingPlayer?.uzivatele?.prezdivka || 'Zvolený alchymista';
+                notify(`Hra byla zahájena! Začíná ${startingName}.`, 'success');
             }
         } catch (err) {
             console.error('Chyba při zahájení hry:', err);
@@ -703,6 +750,7 @@ export default function Lobby({ user, onLogout, showToast }) {
             return (
                 <GameBoard
                     roomCode={currentRoom}
+                    roomName={currentRoomName}
                     user={user}
                     isHost={isHost}
                     players={approvedPlayers}
@@ -719,6 +767,9 @@ export default function Lobby({ user, onLogout, showToast }) {
                     <div className="room-header">
                         <div className="room-code-label">Kód laboratoře</div>
                         <div className="room-code-tag">{currentRoom}</div>
+                        {currentRoomName && (
+                            <h2 className="room-name-heading">{currentRoomName}</h2>
+                        )}
                         <p className="room-share-hint">
                             Sdílej tento kód s ostatními učedníky
                         </p>
@@ -814,6 +865,42 @@ export default function Lobby({ user, onLogout, showToast }) {
                         )}
                     </div>
 
+                    {/* Volba začínajícího hráče pro hosta */}
+                    {isHost && approvedPlayers.length >= 2 && (
+                        <div className="starting-player-box">
+                            <label htmlFor="starting-player-select" className="starting-player-label">
+                                🎲 Začínající hráč:
+                            </label>
+                            <div className="starting-player-controls">
+                                <select
+                                    id="starting-player-select"
+                                    value={startingPlayerId || (approvedPlayers[0] ? String(approvedPlayers[0].player_id) : '')}
+                                    onChange={(e) => setStartingPlayerId(e.target.value)}
+                                    className="starting-player-select"
+                                    aria-label="Výběr začínajícího hráče"
+                                >
+                                    {approvedPlayers.map((p) => {
+                                        const pName = p.uzivatele?.prezdivka || 'Alchymista';
+                                        const isMe = Number(p.player_id) === Number(user.id);
+                                        return (
+                                            <option key={p.id || p.player_id} value={String(p.player_id)}>
+                                                {pName} {isMe ? '(Ty / Host)' : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={handleSelectRandomPlayer}
+                                    className="btn-random-player"
+                                    title="Vybrat začínajícího hráče náhodně"
+                                >
+                                    Vybrat náhodně
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="room-actions">
                         {isHost && approvedPlayers.filter((p) => Number(p.player_id) !== Number(user.id)).length >= 1 && (
                             <button
@@ -865,14 +952,25 @@ export default function Lobby({ user, onLogout, showToast }) {
                 <h2 className="lobby-title">Alchymistická dílna</h2>
                 <p className="lobby-subtitle">Vyber si aktivní laboratoř ze seznamu, zadej PIN nebo založ novou.</p>
 
-                <button 
-                    type="button"
-                    onClick={handleCreateRoom}
-                    disabled={loading}
-                    className="btn-create-room"
-                >
-                    {loading ? 'Vytvářím...' : 'Založit novou laboratoř'}
-                </button>
+                <form onSubmit={handleCreateRoom} className="create-room-form">
+                    <input 
+                        type="text" 
+                        placeholder="Název laboratoře (např. Temná komnata)" 
+                        value={roomName}
+                        onChange={(e) => setRoomName(e.target.value)}
+                        disabled={loading}
+                        className="room-name-input"
+                        aria-label="Název laboratoře"
+                        maxLength={40}
+                    />
+                    <button 
+                        type="submit"
+                        disabled={loading}
+                        className="btn-create-room"
+                    >
+                        {loading ? 'Vytvářím...' : 'Založit novou laboratoř'}
+                    </button>
+                </form>
 
                 <div className="join-section">
                     <form onSubmit={handleJoinFormSubmit} className="join-form">
@@ -913,6 +1011,9 @@ export default function Lobby({ user, onLogout, showToast }) {
                                     <li key={room.id || room.room_code} className="active-room-item">
                                         <div className="active-room-info">
                                             <div className="active-room-code">{room.room_code}</div>
+                                            {room.room_name && (
+                                                <div className="active-room-name">{room.room_name}</div>
+                                            )}
                                             <div className="active-room-host">
                                                 Správce: <strong>{hostDisplayName}</strong>
                                             </div>
