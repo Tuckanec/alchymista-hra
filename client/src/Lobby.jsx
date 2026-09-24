@@ -203,12 +203,15 @@ export default function Lobby({ user, onLogout, showToast }) {
             try {
                 const { data, error } = await supabase
                     .from('rooms')
-                    .select('status')
+                    .select('status, game_status')
                     .eq('room_code', currentRoom)
                     .maybeSingle();
 
-                if (!isCancelled && !error && data && data.status) {
-                    setRoomStatus(data.status);
+                if (!isCancelled && !error && data) {
+                    const st = data.game_status || data.status;
+                    if (st) {
+                        setRoomStatus(st);
+                    }
                 }
             } catch (err) {
                 console.error('Chyba při načítání stavu místnosti:', err);
@@ -228,8 +231,11 @@ export default function Lobby({ user, onLogout, showToast }) {
                     filter: `room_code=eq.${currentRoom}`
                 },
                 (payload) => {
-                    if (payload.new && payload.new.status) {
-                        setRoomStatus(payload.new.status);
+                    if (payload.new) {
+                        const st = payload.new.game_status || payload.new.status;
+                        if (st) {
+                            setRoomStatus(st);
+                        }
                     }
                 }
             )
@@ -487,30 +493,56 @@ export default function Lobby({ user, onLogout, showToast }) {
     };
 
     // =========================================================
-    // 5c. ZAHÁJENÍ HRY / VAŘENÍ (HOST ACTION)
+    // 5c. ZAHÁJENÍ HRY (HOST ACTION) - RUSKÁ RULETA
     // =========================================================
     const handleStartGame = async () => {
         if (!isHost || !currentRoom) return;
 
-        if (approvedPlayers.length < 2) {
-            notify('K zahájení hry jsou potřeba alespoň 2 schválení hráči.', 'error');
+        // Tlačítko a spuštění je platné, pokud je v místnosti alespoň jeden další approved hráč
+        const otherApprovedPlayers = approvedPlayers.filter(
+            (p) => Number(p.player_id) !== Number(user.id)
+        );
+
+        if (otherApprovedPlayers.length < 1) {
+            notify('K zahájení hry je potřeba alespoň jeden další schválený hráč.', 'error');
             return;
         }
 
         try {
+            // Vygeneruje pole: 25 řetězců 'safe' a 2 řetězce 'killer'. Pole náhodně zamíchej (shuffle).
+            const deck = [...Array(25).fill('safe'), ...Array(2).fill('killer')];
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+
+            const hostPlayerId = Number(user.id);
+
+            // Reset is_dead pro všechny schválené hráče
+            await supabase
+                .from('room_players')
+                .update({ is_dead: false })
+                .eq('room_code', currentRoom);
+
+            // Update tabulky rooms: ulož zamíchané pole do deck, game_status = 'playing', current_turn_player_id = host
             const { error } = await supabase
                 .from('rooms')
-                .update({ status: 'playing' })
+                .update({
+                    deck,
+                    game_status: 'playing',
+                    status: 'playing',
+                    current_turn_player_id: hostPlayerId
+                })
                 .eq('room_code', currentRoom);
 
             if (error) {
                 notify('Nepodařilo se zahájit hru: ' + error.message, 'error');
             } else {
                 setRoomStatus('playing');
-                notify('Vaření začíná! Kotlík byl zapálen.', 'success');
+                notify('Hra byla zahájena! Začínáš na tahu.', 'success');
             }
         } catch (err) {
-            console.error('Chyba při zahájení vaření:', err);
+            console.error('Chyba při zahájení hry:', err);
         }
     };
 
@@ -667,7 +699,7 @@ export default function Lobby({ user, onLogout, showToast }) {
     // =========================================================
     if (currentRoom && myPlayerStatus === 'approved') {
         // Pokud hra již začala, zobrazíme herní desku GameBoard
-        if (roomStatus === 'playing') {
+        if (roomStatus === 'playing' || roomStatus === 'finished') {
             return (
                 <GameBoard
                     roomCode={currentRoom}
@@ -783,15 +815,13 @@ export default function Lobby({ user, onLogout, showToast }) {
                     </div>
 
                     <div className="room-actions">
-                        {isHost && (
+                        {isHost && approvedPlayers.filter((p) => Number(p.player_id) !== Number(user.id)).length >= 1 && (
                             <button
                                 type="button"
                                 onClick={handleStartGame}
                                 className="btn-start-game"
-                                disabled={approvedPlayers.length < 2}
-                                title={approvedPlayers.length < 2 ? 'K zahájení hry jsou potřeba alespoň 2 schválení učedníci' : 'Zahájit vaření'}
                             >
-                                Zahájit vaření {approvedPlayers.length < 2 ? '(min. 2 hráči)' : ''}
+                                Zahájit hru
                             </button>
                         )}
 
