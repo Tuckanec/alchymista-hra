@@ -441,15 +441,141 @@
     transition: all 0.15s ease;
 }
 
-.btn-dice-random:hover {
+.btn-dice-random:hover:not(:disabled) {
     background: #2b2e3e;
     border-color: #f59e0b;
     transform: scale(1.1) rotate(12deg);
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
 }
 
-.btn-dice-random:active {
+.btn-dice-random:active:not(:disabled) {
     transform: scale(0.95);
+}
+
+.btn-dice-random:disabled {
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+.btn-dice-random.is-rolling {
+    animation: diceRoll 0.4s infinite ease-in-out;
+    border-color: #f59e0b;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+}
+
+@keyframes diceRoll {
+    0% { transform: rotate(0deg) scale(1.05); }
+    25% { transform: rotate(15deg) scale(1.18); }
+    50% { transform: rotate(0deg) scale(1.05); }
+    75% { transform: rotate(-15deg) scale(1.18); }
+    100% { transform: rotate(0deg) scale(1.05); }
+}
+
+/* Losovací animovaný box (zpomalující se ruleta) */
+.roulette-roller-box {
+    background: linear-gradient(135deg, rgba(32, 26, 16, 0.95) 0%, rgba(20, 22, 32, 0.95) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 15px rgba(245, 158, 11, 0.15);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    animation: rouletteBoxPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    transition: all 0.3s ease;
+}
+
+.roulette-roller-box.is-winner {
+    border-color: #10b981;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(18, 24, 22, 0.95) 100%);
+    box-shadow: 0 4px 25px rgba(0, 0, 0, 0.6), 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+@keyframes rouletteBoxPop {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.roulette-roller-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #f59e0b;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+
+.roulette-roller-box.is-winner .roulette-roller-header {
+    color: #10b981;
+}
+
+.roulette-dice-icon {
+    font-size: 14px;
+    display: inline-block;
+    animation: diceSpin 0.6s infinite linear;
+}
+
+.roulette-roller-box.is-winner .roulette-dice-icon {
+    animation: none;
+}
+
+@keyframes diceSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.roulette-roller-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 6px 16px;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    min-width: 180px;
+}
+
+.roulette-roller-avatar {
+    font-size: 20px;
+}
+
+.roulette-roller-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fef3c7;
+    letter-spacing: 0.3px;
+    animation: rouletteNameTick 0.1s ease;
+}
+
+.roulette-roller-box.is-winner .roulette-roller-name {
+    color: #34d399;
+}
+
+.roulette-roller-flag {
+    font-size: 18px;
+    animation: flagPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes flagPop {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes rouletteNameTick {
+    0% { transform: translateY(-3px); opacity: 0.7; }
+    100% { transform: translateY(0); opacity: 1; }
 }
 
 .player-list {
@@ -494,15 +620,16 @@
 .player-item-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: flex-end;
+    gap: 6px;
 }
 
 .btn-flag-starting {
     background: transparent;
     border: 1px solid transparent;
-    padding: 4px 6px;
+    padding: 0;
     font-size: 15px;
-    border-radius: 5px;
+    border-radius: 6px;
     transition: all 0.2s ease;
     line-height: 1;
     display: inline-flex;
@@ -510,10 +637,13 @@
     justify-content: center;
     opacity: 0.35;
     filter: grayscale(1);
+    width: 32px;
+    height: 32px;
+    box-sizing: border-box;
 }
 
 .btn-flag-starting:hover:not(:disabled) {
-    opacity: 0.75;
+    opacity: 0.85;
     filter: grayscale(0.2);
     background: rgba(255, 255, 255, 0.06);
     transform: scale(1.1);
@@ -532,23 +662,40 @@
     transform: scale(1.12);
 }
 
-.btn-kick {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 11px;
-    padding: 3px 6px;
-    border-radius: 4px;
-    color: #ef4444;
-    opacity: 0.6;
-    transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
-    line-height: 1;
+.btn-flag-starting:disabled {
+    cursor: not-allowed !important;
 }
 
-.btn-kick:hover {
+.btn-kick {
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: #ef4444;
+    opacity: 0.65;
+    transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.btn-kick:hover:not(:disabled) {
     opacity: 1;
     background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
     transform: scale(1.1);
+}
+
+.btn-kick:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 
 .room-actions {
@@ -1005,36 +1152,85 @@
     box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
 }
 
-.modal-form-group.checkbox-group {
-    padding: 12px 14px;
+/* Moderní animovaný Toggle Switch pro viditelnost laboratoře / párty */
+.modal-form-group.toggle-group {
+    padding: 12px 16px;
     background: #13141c;
     border: 1px solid #262938;
-    border-radius: 8px;
+    border-radius: 10px;
+    transition: border-color 0.2s ease;
 }
 
-.modal-checkbox-label {
+.modal-form-group.toggle-group:hover {
+    border-color: #3b3f54;
+}
+
+.toggle-switch-label {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 10px;
     cursor: pointer;
-    font-size: 14px;
-    color: #f3f4f6;
-    font-weight: 500;
     user-select: none;
+    width: 100%;
+    margin: 0;
 }
 
-.modal-checkbox {
-    width: 18px;
-    height: 18px;
-    accent-color: #10b981;
+.toggle-switch-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #f3f4f6;
+}
+
+.toggle-switch-wrap {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.toggle-switch-input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.toggle-switch-slider {
+    position: absolute;
     cursor: pointer;
+    inset: 0;
+    background-color: #2c3042;
+    transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.modal-hint {
-    margin: 6px 0 0 28px;
-    font-size: 12px;
-    color: #8b8f9e;
-    line-height: 1.4;
+.toggle-switch-slider::before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: #e5e7eb;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s ease;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-switch-input:checked + .toggle-switch-slider {
+    background-color: #10b981;
+    border-color: rgba(16, 185, 129, 0.4);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+.toggle-switch-input:checked + .toggle-switch-slider::before {
+    transform: translateX(20px);
+    background-color: #ffffff;
+}
+
+.toggle-switch-input:focus-visible + .toggle-switch-slider {
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
 }
 
 .modal-actions {

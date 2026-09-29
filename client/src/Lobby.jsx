@@ -25,6 +25,18 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
     const [modalRoomName, setModalRoomName] = useState('');
     const [modalIsPublic, setModalIsPublic] = useState(true);
 
+    // Losovací animace začínajícího hráče
+    const [isRollingStartingPlayer, setIsRollingStartingPlayer] = useState(false);
+    const [rollingPlayer, setRollingPlayer] = useState(null);
+    const [isRollFinished, setIsRollFinished] = useState(false);
+    const rollTimeoutsRef = useRef([]);
+
+    useEffect(() => {
+        return () => {
+            rollTimeoutsRef.current.forEach(clearTimeout);
+        };
+    }, []);
+
     // Reference pro předcházení duplicitním notifikacím o schválení
     const prevStatusRef = useRef(null);
 
@@ -588,12 +600,50 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
         }
     };
 
-    const handleSelectRandomPlayer = async () => {
-        if (approvedPlayers.length === 0) return;
-        const randomIndex = Math.floor(Math.random() * approvedPlayers.length);
-        const chosen = approvedPlayers[randomIndex];
-        const chosenName = chosen.uzivatele?.prezdivka || 'Hráč';
-        await handleSetStartingPlayer(chosen.player_id, chosenName);
+    const handleSelectRandomPlayer = () => {
+        if (!isHost || isRollingStartingPlayer || approvedPlayers.length === 0) return;
+
+        // Vyčistit předchozí časovače
+        rollTimeoutsRef.current.forEach(clearTimeout);
+        rollTimeoutsRef.current = [];
+
+        setIsRollingStartingPlayer(true);
+        setIsRollFinished(false);
+
+        // Náhodný cílový začínající hráč
+        const targetIndex = Math.floor(Math.random() * approvedPlayers.length);
+        const targetWinner = approvedPlayers[targetIndex];
+
+        // Zpomalující se ruleta (postupné navýšení intervalu, celkem ~1.8 s)
+        const steps = [50, 50, 55, 60, 65, 75, 85, 100, 120, 150, 190, 240, 300, 380];
+        let cumulativeTime = 0;
+        let currPlayerIdx = 0;
+
+        steps.forEach((delay, index) => {
+            cumulativeTime += delay;
+            const isLast = index === steps.length - 1;
+
+            const t = setTimeout(() => {
+                if (isLast) {
+                    setRollingPlayer(targetWinner);
+                    setIsRollFinished(true);
+
+                    // Po krátkém zobrazení vítězného hráče (450 ms) uložit do DB a rozsvítit vlaječku
+                    const finishTimer = setTimeout(async () => {
+                        const targetName = targetWinner.uzivatele?.prezdivka || 'Alchymista';
+                        await handleSetStartingPlayer(targetWinner.player_id, targetName);
+                        setIsRollingStartingPlayer(false);
+                        setIsRollFinished(false);
+                    }, 450);
+                    rollTimeoutsRef.current.push(finishTimer);
+                } else {
+                    currPlayerIdx = (currPlayerIdx + 1) % approvedPlayers.length;
+                    setRollingPlayer(approvedPlayers[currPlayerIdx]);
+                }
+            }, cumulativeTime);
+
+            rollTimeoutsRef.current.push(t);
+        });
     };
 
     // =========================================================
@@ -1100,14 +1150,36 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                 <button
                                                     type="button"
                                                     onClick={handleSelectRandomPlayer}
-                                                    className="btn-dice-random"
+                                                    className={`btn-dice-random ${isRollingStartingPlayer ? 'is-rolling' : ''}`}
                                                     title="Náhodně vylosovat začínajícího hráče ze seznamu"
                                                     aria-label="Náhodně vylosovat začínajícího hráče ze seznamu"
+                                                    disabled={isRollingStartingPlayer}
                                                 >
                                                     🎲
                                                 </button>
                                             )}
                                         </div>
+
+                                        {/* Losovací animovaný box (zpomalující se ruleta) */}
+                                        {isRollingStartingPlayer && (
+                                            <div className={`roulette-roller-box ${isRollFinished ? 'is-winner' : ''}`}>
+                                                <div className="roulette-roller-header">
+                                                    <span className="roulette-dice-icon">🎲</span>
+                                                    <span className="roulette-roller-title">
+                                                        {isRollFinished ? 'Začínající alchymista' : 'Losování začínajícího hráče...'}
+                                                    </span>
+                                                </div>
+                                                <div className="roulette-roller-content">
+                                                    <span className="roulette-roller-avatar">
+                                                        {rollingPlayer?.is_host ? '👑' : '🧪'}
+                                                    </span>
+                                                    <span className="roulette-roller-name">
+                                                        {rollingPlayer?.uzivatele?.prezdivka || 'Alchymista'}
+                                                    </span>
+                                                    {isRollFinished && <span className="roulette-roller-flag">🚩</span>}
+                                                </div>
+                                            </div>
+                                        )}
 
                                         <ul className="player-list">
                                             {approvedPlayers.map((p) => {
@@ -1124,10 +1196,22 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                         </span>
                                                         <div className="player-item-meta">
                                                             {p.is_guest && <span className="badge-guest">Host</span>}
+                                                            {isHost && !isMe && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleKickPlayer(p)}
+                                                                    className="btn-kick"
+                                                                    title={`Vykopnout hráče ${playerName}`}
+                                                                    aria-label={`Vykopnout hráče ${playerName}`}
+                                                                    disabled={isRollingStartingPlayer}
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 type="button"
                                                                 onClick={() => {
-                                                                    if (isHost) {
+                                                                    if (isHost && !isRollingStartingPlayer) {
                                                                         handleSetStartingPlayer(p.player_id, playerName);
                                                                     }
                                                                 }}
@@ -1138,21 +1222,11 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                                         : (isStarting ? `Začínající hráč: ${playerName}` : '')
                                                                 }
                                                                 aria-label={isStarting ? `Začínající hráč: ${playerName}` : `Určit hráče ${playerName} jako začínajícího`}
-                                                                style={{ cursor: isHost ? 'pointer' : 'default' }}
+                                                                style={{ cursor: isHost && !isRollingStartingPlayer ? 'pointer' : 'default' }}
+                                                                disabled={isRollingStartingPlayer}
                                                             >
                                                                 🚩
                                                             </button>
-                                                            {isHost && !isMe && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleKickPlayer(p)}
-                                                                    className="btn-kick"
-                                                                    title={`Vykopnout hráče ${playerName}`}
-                                                                    aria-label={`Vykopnout hráče ${playerName}`}
-                                                                >
-                                                                    ❌
-                                                                </button>
-                                                            )}
                                                         </div>
                                                     </li>
                                                 );
@@ -1192,8 +1266,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                             <button 
                                                 type="button"
                                                 onClick={() => {
-                                                    const defaultPartyName = user?.prezdivka ? `Párty hráče ${user.prezdivka}` : 'Párty';
-                                                    setModalRoomName(defaultPartyName);
+                                                    setModalRoomName('');
                                                     setModalIsPublic(true);
                                                     setShowCreateModal(true);
                                                 }}
@@ -1317,7 +1390,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                 <input
                                     id="modal-room-name"
                                     type="text"
-                                    placeholder={user?.prezdivka ? `Párty hráče ${user.prezdivka}` : 'Název párty'}
+                                    placeholder={user?.prezdivka ? `Párty hráče ${user.prezdivka}` : 'Párty'}
                                     value={modalRoomName}
                                     onChange={(e) => setModalRoomName(e.target.value)}
                                     disabled={loading}
@@ -1327,22 +1400,21 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                 />
                             </div>
 
-                            <div className="modal-form-group checkbox-group">
-                                <label className="modal-checkbox-label">
-                                    <input
-                                        type="checkbox"
-                                        checked={modalIsPublic}
-                                        onChange={(e) => setModalIsPublic(e.target.checked)}
-                                        disabled={loading}
-                                        className="modal-checkbox"
-                                    />
-                                    <span>Viditelná v seznamu laboratoří</span>
+                            <div className="modal-form-group toggle-group">
+                                <label className="toggle-switch-label" htmlFor="modal-is-public-toggle">
+                                    <span className="toggle-switch-text">Viditelná v seznamu párty</span>
+                                    <div className="toggle-switch-wrap">
+                                        <input
+                                            id="modal-is-public-toggle"
+                                            type="checkbox"
+                                            checked={modalIsPublic}
+                                            onChange={(e) => setModalIsPublic(e.target.checked)}
+                                            disabled={loading}
+                                            className="toggle-switch-input"
+                                        />
+                                        <span className="toggle-switch-slider"></span>
+                                    </div>
                                 </label>
-                                <p className="modal-hint">
-                                    {modalIsPublic
-                                        ? 'Laboratoř bude veřejná a zobrazí se v živém seznamu.'
-                                        : 'Soukromá laboratoř. Vstup je možný pouze přes PIN kód.'}
-                                </p>
                             </div>
 
                             <div className="modal-actions">
