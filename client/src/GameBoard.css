@@ -622,20 +622,8 @@
     max-width: 420px;
     width: 100%;
     text-align: center;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(245, 158, 11, 0.15);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8);
     box-sizing: border-box;
-}
-
-.game-over-trophy {
-    font-size: 56px;
-    margin-bottom: 12px;
-    filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.6));
-    animation: trophyBounce 1.6s infinite ease-in-out;
-}
-
-@keyframes trophyBounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
 }
 
 .game-over-heading {
@@ -667,21 +655,8 @@
     font-size: 32px;
     font-weight: 800;
     color: #fef3c7;
-    text-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
     letter-spacing: 0.5px;
     word-break: break-word;
-}
-
-.badge-you-won {
-    display: inline-block;
-    margin-top: 10px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #10b981;
-    background: rgba(16, 185, 129, 0.15);
-    border: 1px solid rgba(16, 185, 129, 0.35);
-    padding: 3px 10px;
-    border-radius: 12px;
 }
 
 .game-over-actions {

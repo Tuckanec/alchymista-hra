@@ -797,17 +797,11 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             {gameStatus === 'finished' && (
                 <div className="game-over-modal-overlay" role="dialog" aria-modal="true">
                     <div className="game-over-modal-card">
-                        <div className="game-over-trophy">
-                            {isMeWinner ? '🏆' : '👑'}
-                        </div>
                         <h2 className="game-over-heading">Konec hry</h2>
 
                         <div className="game-over-winner-box">
                             <span className="game-over-winner-label">VÍTĚZ</span>
                             <h1 className="game-over-winner-name">{winnerName}</h1>
-                            {isMeWinner && (
-                                <span className="badge-you-won">Přežil jsi zkoušku osudu!</span>
-                            )}
                         </div>
 
                         <div className="game-over-actions">
@@ -817,7 +811,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                     onClick={handleResetToLobby}
                                     className="btn-return-lobby"
                                 >
-                                    Návrat do laboratoře
+                                    Hrát znovu
                                 </button>
                             ) : (
                                 <p className="waiting-host-text">Čeká se na správce...</p>
