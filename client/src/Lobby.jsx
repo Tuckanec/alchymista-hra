@@ -36,6 +36,14 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
         }
     }, [showToast]);
 
+    // Filtrovaní hráči a určení začínajícího hráče
+    const approvedPlayers = players.filter((p) => p.status === 'approved');
+    const pendingPlayers = players.filter((p) => p.status === 'pending');
+    const hostPlayer = approvedPlayers.find((p) => p.is_host);
+    const effectiveStartingPlayerId = startingPlayerId && approvedPlayers.some((p) => String(p.player_id) === String(startingPlayerId))
+        ? String(startingPlayerId)
+        : (hostPlayer ? String(hostPlayer.player_id) : (approvedPlayers[0] ? String(approvedPlayers[0].player_id) : ''));
+
     // =========================================================
     // 0. AUTOMATICKÝ RECONNECT PO OBNOVENÍ STRÁNKY (F5)
     // =========================================================
@@ -228,7 +236,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
             try {
                 const { data, error } = await supabase
                     .from('rooms')
-                    .select('status, game_status, room_name')
+                    .select('status, game_status, room_name, current_turn_player_id')
                     .eq('room_code', currentRoom)
                     .maybeSingle();
 
@@ -239,6 +247,9 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                     }
                     if (data.room_name) {
                         setCurrentRoomName(data.room_name);
+                    }
+                    if (data.current_turn_player_id) {
+                        setStartingPlayerId(String(data.current_turn_player_id));
                     }
                 }
             } catch (err) {
@@ -266,6 +277,9 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                         }
                         if (payload.new.room_name) {
                             setCurrentRoomName(payload.new.room_name);
+                        }
+                        if (payload.new.current_turn_player_id) {
+                            setStartingPlayerId(String(payload.new.current_turn_player_id));
                         }
                     }
                 }
@@ -310,7 +324,8 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
         setLoading(true);
         try {
             const newCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-            const formattedName = modalRoomName.trim() || `Laboratoř ${newCode}`;
+            const defaultPartyName = user?.prezdivka ? `Párty hráče ${user.prezdivka}` : `Párty ${newCode}`;
+            const formattedName = modalRoomName.trim() || defaultPartyName;
 
             // 1. Vložení místnosti do tabulky 'rooms' včetně room_name a is_public
             const { error: roomError } = await supabase
@@ -322,7 +337,8 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                         status: 'waiting',
                         game_status: 'waiting',
                         room_name: formattedName,
-                        is_public: Boolean(modalIsPublic)
+                        is_public: Boolean(modalIsPublic),
+                        current_turn_player_id: Number(user.id)
                     }
                 ]);
 
@@ -429,6 +445,20 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                 return;
             }
 
+            // 3. Kontrola limitu 5 schválených hráčů v místnosti
+            const { count: approvedCount, error: countError } = await supabase
+                .from('room_players')
+                .select('*', { count: 'exact', head: true })
+                .eq('room_code', code)
+                .eq('status', 'approved');
+
+            if (countError) {
+                console.error('Chyba při zjišťování kapacity:', countError);
+            } else if (approvedCount !== null && approvedCount >= 5) {
+                notify('Tato párty je již plná (max. 5 hráčů).', 'error');
+                return;
+            }
+
             // Pokud je hráč původní zakladatel místnosti podle rooms tabulky, rovnou approved host
             const isOriginalHost = Number(room.host_id) === Number(user.id);
             const initialStatus = isOriginalHost ? 'approved' : 'pending';
@@ -479,7 +509,11 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
     // 5. SCHVALOVÁNÍ A ODMÍTÁNÍ ŽÁDOSTÍ (HOST ACTIONS)
     // =========================================================
     const handleApprovePlayer = async (targetPlayer) => {
-        const playerName = targetPlayer.uzivatele?.prezdivka || 'Učedník';
+        if (approvedPlayers.length >= 5) {
+            notify('Tato párty je již plná (max. 5 hráčů).', 'error');
+            return;
+        }
+        const playerName = targetPlayer.uzivatele?.prezdivka || 'Hráč';
         try {
             const { error } = await supabase
                 .from('room_players')
@@ -489,7 +523,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
             if (error) {
                 notify('Chyba při schvalování: ' + error.message, 'error');
             } else {
-                notify(`Učedník ${playerName} byl schválen.`, 'success');
+                notify(`Hráč ${playerName} byl schválen.`, 'success');
             }
         } catch (err) {
             console.error('Chyba při schvalování:', err);
@@ -536,15 +570,30 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
     };
 
     // =========================================================
-    // 5c. VÝBĚR NÁHODNÉHO ZAČÍNAJÍCÍHO HRÁČE
+    // 5c. VÝBĚR ZAČÍNAJÍCÍHO HRÁČE (VLAJEČKA / NÁHODNÁ KOSTKA)
     // =========================================================
-    const handleSelectRandomPlayer = () => {
+    const handleSetStartingPlayer = async (playerId, playerName) => {
+        if (!isHost) return;
+        setStartingPlayerId(String(playerId));
+        notify(`Začínající hráč určen: ${playerName}`, 'info');
+        if (currentRoom) {
+            try {
+                await supabase
+                    .from('rooms')
+                    .update({ current_turn_player_id: Number(playerId) })
+                    .eq('room_code', currentRoom);
+            } catch (e) {
+                console.error('Chyba při ukládání začínajícího hráče:', e);
+            }
+        }
+    };
+
+    const handleSelectRandomPlayer = async () => {
         if (approvedPlayers.length === 0) return;
         const randomIndex = Math.floor(Math.random() * approvedPlayers.length);
         const chosen = approvedPlayers[randomIndex];
-        setStartingPlayerId(String(chosen.player_id));
-        const chosenName = chosen.uzivatele?.prezdivka || 'Učedník';
-        notify(`Začínající hráč náhodně vybrán: ${chosenName}`, 'info');
+        const chosenName = chosen.uzivatele?.prezdivka || 'Hráč';
+        await handleSetStartingPlayer(chosen.player_id, chosenName);
     };
 
     // =========================================================
@@ -571,11 +620,8 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                 [deck[i], deck[j]] = [deck[j], deck[i]];
             }
 
-            // Určení začínajícího hráče: ID z dropdownu nebo ID hosta
-            let chosenPlayerId = Number(startingPlayerId);
-            if (!chosenPlayerId || !approvedPlayers.some((p) => Number(p.player_id) === chosenPlayerId)) {
-                chosenPlayerId = Number(user.id);
-            }
+            // Určení začínajícího hráče: ID vybrané vlaječkou/kostkou nebo ID hosta
+            let chosenPlayerId = Number(effectiveStartingPlayerId) || Number(user.id);
 
             // Reset is_dead pro všechny schválené hráče
             await supabase
@@ -705,10 +751,6 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
             onLogout();
         }
     };
-
-    // Filtrovaní hráči pro zobrazení
-    const approvedPlayers = players.filter((p) => p.status === 'approved');
-    const pendingPlayers = players.filter((p) => p.status === 'pending');
 
     // =========================================================
     // UI: KONTROLA AKTIVNÍ RELACE PO OBNOVENÍ (F5)
@@ -1003,84 +1045,98 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                             <div className="lobby-wrapper">
                                 <div className="lobby-card">
                                     <div className="room-header">
-                                        <div className="room-code-label">Kód laboratoře</div>
+                                        <h2 className="room-name-heading">{currentRoomName || (user?.prezdivka ? `Párty hráče ${user.prezdivka}` : `Párty ${currentRoom}`)}</h2>
                                         <div className="room-code-tag">{currentRoom}</div>
-                                        {currentRoomName && (
-                                            <h2 className="room-name-heading">{currentRoomName}</h2>
-                                        )}
-                                        <p className="room-share-hint">
-                                            Sdílej tento kód s ostatními učedníky
-                                        </p>
                                     </div>
 
-                                    {/* Sekce čekajících učedníků pro hosta */}
-                                    {isHost && (
-                                        <div className="room-pending-box">
-                                            <div className="room-players-header">
-                                                <h3>Čekající učedníci ({pendingPlayers.length})</h3>
-                                                {pendingPlayers.length > 0 && (
-                                                    <span className="badge-pending-count">Žádosti</span>
-                                                )}
-                                            </div>
-
-                                            {pendingPlayers.length === 0 ? (
-                                                <p className="empty-subtext">Žádné nevyřízené žádosti o vstup.</p>
-                                            ) : (
-                                                <ul className="pending-list">
-                                                    {pendingPlayers.map((p) => {
-                                                        const playerName = p.uzivatele?.prezdivka || 'Učedník';
-                                                        return (
-                                                            <li key={p.id} className="pending-item">
-                                                                <div className="pending-item-info">
-                                                                    <span className="pending-name">{playerName}</span>
-                                                                    {p.is_guest && <span className="badge-guest">Host</span>}
-                                                                </div>
-                                                                <div className="pending-item-actions">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleApprovePlayer(p)}
-                                                                        className="btn-approve"
-                                                                        title="Povolit vstup"
-                                                                    >
-                                                                        Schválit
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleRejectPlayer(p)}
-                                                                        className="btn-reject"
-                                                                        title="Odmítnout žádost"
-                                                                    >
-                                                                        Odmítnout
-                                                                    </button>
-                                                                </div>
-                                                            </li>
-                                                        );
-                                                    })}
-                                                </ul>
-                                            )}
+                                    {/* Kompaktní žádosti o přístup pro správce */}
+                                    {isHost && pendingPlayers.length > 0 && (
+                                        <div className="pending-compact-container">
+                                            {pendingPlayers.map((p) => {
+                                                const playerName = p.uzivatele?.prezdivka || 'Učedník';
+                                                const isFull = approvedPlayers.length >= 5;
+                                                return (
+                                                    <div key={p.id} className="pending-compact-strip">
+                                                        <span className="pending-compact-text">
+                                                            Hráč <strong>{playerName}</strong> čeká na vpuštění
+                                                        </span>
+                                                        <div className="pending-compact-actions">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleApprovePlayer(p)}
+                                                                className="btn-compact-action btn-compact-approve"
+                                                                title={isFull ? 'Tato párty je již plná (max. 5 hráčů).' : `Schválit hráče ${playerName}`}
+                                                                aria-label={`Schválit hráče ${playerName}`}
+                                                                disabled={isFull}
+                                                            >
+                                                                ✓
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRejectPlayer(p)}
+                                                                className="btn-compact-action btn-compact-reject"
+                                                                title={`Zamítnout žádost hráče ${playerName}`}
+                                                                aria-label={`Zamítnout žádost hráče ${playerName}`}
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     )}
 
-                                    {/* Učedníci u kotlíku v místnosti */}
+                                    {/* Hráči v párty */}
                                     <div className="room-players-box">
                                         <div className="room-players-header">
-                                            <h3>Učedníci u kotlíku ({approvedPlayers.length})</h3>
-                                            <span className="realtime-pill">Realtime</span>
+                                            <h3>Hráči v párty ({approvedPlayers.length}/5)</h3>
+                                            {isHost && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSelectRandomPlayer}
+                                                    className="btn-dice-random"
+                                                    title="Náhodně vylosovat začínajícího hráče ze seznamu"
+                                                    aria-label="Náhodně vylosovat začínajícího hráče ze seznamu"
+                                                >
+                                                    🎲
+                                                </button>
+                                            )}
                                         </div>
 
                                         <ul className="player-list">
                                             {approvedPlayers.map((p) => {
                                                 const isMe = Number(p.player_id) === Number(user.id);
                                                 const playerName = p.uzivatele?.prezdivka || 'Alchymista';
+                                                const isStarting = String(p.player_id) === effectiveStartingPlayerId;
+
                                                 return (
-                                                    <li key={p.id || p.player_id} className="player-item">
-                                                        <span>
+                                                    <li key={p.id || p.player_id} className={`player-item ${isStarting ? 'is-starting' : ''}`}>
+                                                        <span className="player-item-name">
                                                             {p.is_host ? '👑 ' : ''}
                                                             {playerName}
                                                             {isMe && <span className="player-me">(Ty)</span>}
                                                         </span>
                                                         <div className="player-item-meta">
                                                             {p.is_guest && <span className="badge-guest">Host</span>}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (isHost) {
+                                                                        handleSetStartingPlayer(p.player_id, playerName);
+                                                                    }
+                                                                }}
+                                                                className={`btn-flag-starting ${isStarting ? 'is-active' : ''}`}
+                                                                title={
+                                                                    isHost
+                                                                        ? (isStarting ? `Začínající hráč: ${playerName}` : `Určit hráče ${playerName} jako začínajícího`)
+                                                                        : (isStarting ? `Začínající hráč: ${playerName}` : '')
+                                                                }
+                                                                aria-label={isStarting ? `Začínající hráč: ${playerName}` : `Určit hráče ${playerName} jako začínajícího`}
+                                                                style={{ cursor: isHost ? 'pointer' : 'default' }}
+                                                            >
+                                                                🚩
+                                                            </button>
                                                             {isHost && !isMe && (
                                                                 <button
                                                                     type="button"
@@ -1097,47 +1153,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                 );
                                             })}
                                         </ul>
-
-                                        {isHost && (
-                                            <p className="host-role-notice">Jsi správcem této laboratoře.</p>
-                                        )}
                                     </div>
-
-                                    {/* Volba začínajícího hráče pro hosta */}
-                                    {isHost && approvedPlayers.length >= 2 && (
-                                        <div className="starting-player-box">
-                                            <label htmlFor="starting-player-select" className="starting-player-label">
-                                                🎲 Začínající hráč:
-                                            </label>
-                                            <div className="starting-player-controls">
-                                                <select
-                                                    id="starting-player-select"
-                                                    value={startingPlayerId || (approvedPlayers[0] ? String(approvedPlayers[0].player_id) : '')}
-                                                    onChange={(e) => setStartingPlayerId(e.target.value)}
-                                                    className="starting-player-select"
-                                                    aria-label="Výběr začínajícího hráče"
-                                                >
-                                                    {approvedPlayers.map((p) => {
-                                                        const pName = p.uzivatele?.prezdivka || 'Alchymista';
-                                                        const isMe = Number(p.player_id) === Number(user.id);
-                                                        return (
-                                                            <option key={p.id || p.player_id} value={String(p.player_id)}>
-                                                                {pName} {isMe ? '(Ty / Host)' : ''}
-                                                            </option>
-                                                        );
-                                                    })}
-                                                </select>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSelectRandomPlayer}
-                                                    className="btn-random-player"
-                                                    title="Vybrat začínajícího hráče náhodně"
-                                                >
-                                                    Vybrat náhodně
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
 
                                     <div className="room-actions">
                                         {isHost && approvedPlayers.filter((p) => Number(p.player_id) !== Number(user.id)).length >= 1 && (
@@ -1171,7 +1187,8 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                             <button 
                                                 type="button"
                                                 onClick={() => {
-                                                    setModalRoomName('');
+                                                    const defaultPartyName = user?.prezdivka ? `Párty hráče ${user.prezdivka}` : 'Párty';
+                                                    setModalRoomName(defaultPartyName);
                                                     setModalIsPublic(true);
                                                     setShowCreateModal(true);
                                                 }}
@@ -1276,7 +1293,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                 <div className="modal-overlay" role="dialog" aria-modal="true">
                     <div className="modal-card">
                         <div className="modal-header">
-                            <h3 className="modal-title">Založit novou laboratoř</h3>
+                            <h3 className="modal-title">Založit novou párty</h3>
                             <button
                                 type="button"
                                 onClick={() => setShowCreateModal(false)}
@@ -1290,12 +1307,12 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                         <form onSubmit={handleCreateRoomSubmit} className="modal-form">
                             <div className="modal-form-group">
                                 <label htmlFor="modal-room-name" className="modal-label">
-                                    Název laboratoře
+                                    Název párty
                                 </label>
                                 <input
                                     id="modal-room-name"
                                     type="text"
-                                    placeholder="Např. Temná komnata"
+                                    placeholder={user?.prezdivka ? `Párty hráče ${user.prezdivka}` : 'Název párty'}
                                     value={modalRoomName}
                                     onChange={(e) => setModalRoomName(e.target.value)}
                                     disabled={loading}
