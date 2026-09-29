@@ -698,6 +698,11 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
             if (error) {
                 notify('Nepodařilo se zahájit hru: ' + error.message, 'error');
             } else {
+                setPlayers((prev) =>
+                    prev.map((p) =>
+                        p.status === 'approved' ? { ...p, is_dead: false, hand: initialHand } : p
+                    )
+                );
                 setRoomStatus('playing');
                 const startingPlayer = approvedPlayers.find((p) => Number(p.player_id) === chosenPlayerId);
                 const startingName = startingPlayer?.uzivatele?.prezdivka || 'Zvolený alchymista';
@@ -835,6 +840,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                 isHost={isHost}
                 players={approvedPlayers}
                 onLeaveRoom={handleLeaveRoom}
+                onResetToLobby={() => setRoomStatus('waiting')}
                 showToast={showToast}
             />
         );

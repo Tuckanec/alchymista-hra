@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import './GameBoard.css';
 
-export default function GameBoard({ roomCode, roomName, user, isHost, players: initialPlayers = [], onLeaveRoom, showToast }) {
+export default function GameBoard({ roomCode, roomName, user, isHost, players: initialPlayers = [], onLeaveRoom, onResetToLobby, showToast }) {
     // Seznam hráčů v místnosti (udržovaný v reálném čase)
     const [players, setPlayers] = useState(initialPlayers);
 
@@ -84,6 +84,11 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     useEffect(() => {
         onLeaveRoomRef.current = onLeaveRoom;
     }, [onLeaveRoom]);
+
+    const onResetToLobbyRef = useRef(onResetToLobby);
+    useEffect(() => {
+        onResetToLobbyRef.current = onResetToLobby;
+    }, [onResetToLobby]);
 
     const notifyRef = useRef(notify);
     useEffect(() => {
@@ -634,61 +639,44 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     };
 
     // =========================================================
-    // NÁVRAT DO LABORATOŘE / HRÁT ZNOVU (HOST ACTION PO SKONČENÍ HRY)
+    // NÁVRAT DO ČEKÁRNY / HRÁT ZNOVU (HOST ACTION PO SKONČENÍ HRY)
     // =========================================================
     const handleResetToLobby = async () => {
         if (!isHostRef.current) return;
         try {
-            // 1. Nastaví všem schváleným hráčům výchozí ruku s 5 prázdnými kartami a is_dead = false
-            const initialHand = ['safe', 'safe', 'safe', 'safe', 'safe'];
+            // 1. V tabulce room_players nastav všem hráčům v místnosti is_dead: false a vyprázdni jim ruku (hand: [])
             await supabase
                 .from('room_players')
                 .update({
                     is_dead: false,
-                    hand: initialHand
+                    hand: []
                 })
-                .eq('room_code', roomCode)
-                .eq('status', 'approved');
+                .eq('room_code', roomCode);
 
-            // 2. Teprve poté vygeneruj a zamíchej zbylý dobírací balíček (deck) se smrtícími kartami
-            const newDeck = [...Array(25).fill('safe'), ...Array(2).fill('killer')];
-            for (let i = newDeck.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
-            }
-
-            // Začínající hráč
-            const approved = playersRef.current.filter((p) => p.status === 'approved');
-            const startingId = approved.length > 0 ? Number(approved[0].player_id) : Number(user.id);
-
+            // 2. V tabulce rooms nastav stav game_status: 'waiting', status: 'waiting' a vyprázdni balíček (deck: [])
             const { error } = await supabase
                 .from('rooms')
                 .update({
-                    deck: newDeck,
-                    game_status: 'playing',
-                    status: 'playing',
-                    current_turn_player_id: startingId
+                    deck: [],
+                    game_status: 'waiting',
+                    status: 'waiting'
                 })
                 .eq('room_code', roomCode);
 
             if (error) {
-                console.error('Chyba při restartu hry:', error);
+                console.error('Chyba při návratu do čekárny:', error);
                 notify('Chyba: ' + error.message, 'error');
             } else {
-                setDeck(newDeck);
-                setGameStatus('playing');
-                setCurrentTurnPlayerId(startingId);
+                setGameStatus('waiting');
+                setDeck([]);
                 setFlippedCard(null);
-                setIsDealingAnimation(true);
-                setPlayers((prev) =>
-                    prev.map((p) =>
-                        p.status === 'approved' ? { ...p, is_dead: false, hand: initialHand } : p
-                    )
-                );
+                if (onResetToLobbyRef.current) {
+                    onResetToLobbyRef.current();
+                }
             }
         } catch (err) {
-            console.error('Chyba při restartování hry:', err);
-            notify('Chyba při spuštění nové hry.', 'error');
+            console.error('Chyba při návratu do čekárny:', err);
+            notify('Chyba při návratu do čekárny.', 'error');
         }
     };
 
