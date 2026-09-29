@@ -18,10 +18,8 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     // Příznak probíhajícího lízání (zabraňuje vícenásobnému kliknutí)
     const [isDrawing, setIsDrawing] = useState(false);
 
-    // Herní log událostí
-    const [logs, setLogs] = useState([
-        { id: 1, text: 'Hra byla zahájena. Balíček je připraven.', type: 'system', time: '00:00' }
-    ]);
+    // Stav otočení karty: null | { card: 'safe' | 'killer', isFlipped: boolean }
+    const [flippedCard, setFlippedCard] = useState(null);
 
     // Sledování odpojených hráčů a jejich zbývajícího času { [playerId]: seconds }
     const [disconnectedPlayers, setDisconnectedPlayers] = useState({});
@@ -52,10 +50,12 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
         }
     }, [showToast]);
 
-    const addLog = useCallback((text, type = 'normal') => {
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        setLogs((prev) => [...prev, { id: Date.now() + Math.random(), text, type, time: timeStr }]);
+    // Spuštění 3D otočení karty
+    const triggerCardFlip = useCallback((cardType) => {
+        setFlippedCard({ card: cardType, isFlipped: false });
+        setTimeout(() => {
+            setFlippedCard({ card: cardType, isFlipped: true });
+        }, 20);
     }, []);
 
     // Stabilní reference pro callbacky a hodnoty uvnitř Realtime listenerů
@@ -84,10 +84,10 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
         notifyRef.current = notify;
     }, [notify]);
 
-    const addLogRef = useRef(addLog);
+    const triggerCardFlipRef = useRef(triggerCardFlip);
     useEffect(() => {
-        addLogRef.current = addLog;
-    }, [addLog]);
+        triggerCardFlipRef.current = triggerCardFlip;
+    }, [triggerCardFlip]);
 
     const playersRef = useRef(players);
     useEffect(() => {
@@ -95,7 +95,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     }, [players]);
 
     // =========================================================
-    // 1. SUPABASE REALTIME: PRESENCE & POSTGRES CHANGES
+    // 1. SUPABASE REALTIME: PRESENCE, BROADCAST & POSTGRES CHANGES
     // =========================================================
     useEffect(() => {
         if (!roomCode || !user?.id) return;
@@ -184,18 +184,31 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
         fetchRoomData();
         fetchPlayers();
 
-        // Jednotný realtime kanál pro místnost
+        // Jednotný realtime kanál pro místnost s podporou Presence i Broadcastu
         const channel = supabase.channel(`game_room_${roomCode}`, {
             config: {
                 presence: {
                     key: String(user.id)
+                },
+                broadcast: {
+                    self: false
                 }
             }
         });
         channelRef.current = channel;
 
         channel
-            // A) Presence: odpojení hráče
+            // A) Broadcast: Otočení karty v reálném čase pro soupeře
+            .on('broadcast', { event: 'card_flip' }, ({ payload }) => {
+                if (payload?.card) {
+                    triggerCardFlipRef.current?.(payload.card);
+                    setTimeout(() => {
+                        setFlippedCard(null);
+                    }, 1700);
+                }
+            })
+
+            // B) Presence: odpojení hráče
             .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
                 const currentUserId = userRef.current?.id;
                 if (Number(key) === Number(currentUserId)) return;
@@ -206,17 +219,14 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 const targetName = leftPresences?.[0]?.prezdivka || foundPlayer?.uzivatele?.prezdivka || 'Alchymista';
 
                 notifyRef.current?.(`Hráč ${targetName} se odpojil. Čekáme 60 sekund...`, 'error');
-                addLogRef.current?.(`Hráč ${targetName} se odpojil. Běží 60s limit pro návrat.`, 'system');
 
                 setDisconnectedPlayers((prev) => ({ ...prev, [key]: 60 }));
 
                 if (disconnectTimers.current[key]) {
                     clearTimeout(disconnectTimers.current[key]);
-                    delete disconnectTimers.current[key];
                 }
                 if (disconnectIntervals.current[key]) {
                     clearInterval(disconnectIntervals.current[key]);
-                    delete disconnectIntervals.current[key];
                 }
 
                 disconnectIntervals.current[key] = setInterval(() => {
@@ -224,26 +234,28 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                         const currentVal = prev[key];
                         if (currentVal === undefined) return prev;
                         if (currentVal <= 1) {
-                            return { ...prev, [key]: 0 };
+                            clearInterval(disconnectIntervals.current[key]);
+                            delete disconnectIntervals.current[key];
+                            const copy = { ...prev };
+                            delete copy[key];
+                            return copy;
                         }
                         return { ...prev, [key]: currentVal - 1 };
                     });
                 }, 1000);
 
                 disconnectTimers.current[key] = setTimeout(async () => {
+                    delete disconnectTimers.current[key];
                     if (disconnectIntervals.current[key]) {
                         clearInterval(disconnectIntervals.current[key]);
                         delete disconnectIntervals.current[key];
                     }
-                    delete disconnectTimers.current[key];
 
                     setDisconnectedPlayers((prev) => {
                         const copy = { ...prev };
                         delete copy[key];
                         return copy;
                     });
-
-                    addLogRef.current?.(`Časový limit pro hráče ${targetName} vypršel.`, 'system');
 
                     if (isHostRef.current) {
                         try {
@@ -261,8 +273,8 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 }, 60000);
             })
 
-            // B) Presence: návrat hráče
-            .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+            // C) Presence: návrat hráče
+            .on('presence', { event: 'join' }, ({ key }) => {
                 const currentUserId = userRef.current?.id;
                 if (Number(key) === Number(currentUserId)) return;
 
@@ -281,14 +293,13 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                         return copy;
                     });
 
-                    const foundPlayer = playersRef.current.find((p) => String(p.player_id) === String(key));
-                    const targetName = newPresences?.[0]?.prezdivka || foundPlayer?.uzivatele?.prezdivka || 'Alchymista';
-                    notifyRef.current?.(`Hráč ${targetName} je zpět!`, 'success');
-                    addLogRef.current?.(`Hráč ${targetName} se vrátil zpět do hry.`, 'system');
+                    const target = playersRef.current.find((p) => String(p.player_id) === String(key));
+                    const targetName = target?.uzivatele?.prezdivka || 'Alchymista';
+                    notifyRef.current?.(`Hráč ${targetName} se vrátil zpět do hry.`, 'success');
                 }
             })
 
-            // C) Realtime Postgres Changes: změny v tabulce room_players (připojení, odchod, is_dead)
+            // D) Realtime Postgres Changes: změny hráčů
             .on(
                 'postgres_changes',
                 {
@@ -298,16 +309,8 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     filter: `room_code=eq.${roomCode}`
                 },
                 (payload) => {
-                    const deletedId = payload.old?.id;
-                    const deletedPlayerId = payload.old?.player_id;
-
-                    const target = playersRef.current.find(
-                        (p) => (deletedId && Number(p.id) === Number(deletedId)) ||
-                               (deletedPlayerId && Number(p.player_id) === Number(deletedPlayerId))
-                    );
-
-                    const targetPlayerId = target ? target.player_id : deletedPlayerId;
-                    const playerIdKey = targetPlayerId ? String(targetPlayerId) : null;
+                    const deletedId = payload.old?.player_id;
+                    const playerIdKey = deletedId ? String(deletedId) : null;
 
                     if (playerIdKey) {
                         if (disconnectTimers.current[playerIdKey]) {
@@ -325,17 +328,18 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                         });
                     }
 
+                    const target = playersRef.current.find((p) => {
+                        if (payload.old?.id && p.id === payload.old.id) return true;
+                        if (playerIdKey && String(p.player_id) === playerIdKey) return true;
+                        return false;
+                    });
+
                     playersRef.current = playersRef.current.filter((p) => {
-                        if (deletedId && Number(p.id) === Number(deletedId)) return false;
+                        if (payload.old?.id && p.id === payload.old.id) return false;
                         if (playerIdKey && String(p.player_id) === playerIdKey) return false;
                         return true;
                     });
                     setPlayers([...playersRef.current]);
-
-                    if (target) {
-                        const targetName = target.uzivatele?.prezdivka || 'Alchymista';
-                        addLogRef.current?.(`Hráč ${targetName} opustil laboratoř.`, 'system');
-                    }
 
                     fetchPlayers();
                 }
@@ -365,7 +369,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 }
             )
 
-            // D) Realtime Postgres Changes: změny v tabulce rooms (deck, current_turn_player_id, game_status)
+            // E) Realtime Postgres Changes: změny v tabulce rooms (deck, current_turn_player_id, game_status)
             .on(
                 'postgres_changes',
                 {
@@ -386,6 +390,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                 notifyRef.current?.('Jsi na tahu!', 'info');
                             }
                             prevTurnPlayerIdRef.current = newTurnId;
+                            setFlippedCard(null);
                         }
                         if (Array.isArray(payload.new.deck)) {
                             setDeck(payload.new.deck);
@@ -456,18 +461,19 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     const isMeWinner = winnerPlayer && Number(winnerPlayer.player_id) === Number(user.id);
 
     // =========================================================
-    // HERNÍ LOGIKA: LÍZNUTÍ KARTY (KLIK NUTÍ NA BALÍČEK)
+    // HERNÍ LOGIKA: LÍZNUTÍ A OTOČENÍ KARTY (CARD FLIP)
     // =========================================================
     const handleDrawCard = async () => {
-        // Kontrola oprávnění: pouze hráč na tahu, nesmí být mrtev, hra nesmí být u konce
-        if (!isMyTurn || isMeDead || gameStatus === 'finished' || isDrawing) {
+        // Kontrola oprávnění: pouze hráč na tahu, nesmí být mrtev, hra nesmí být u konce, nesmí probíhat lízání
+        if (!isMyTurn || isMeDead || gameStatus === 'finished' || isDrawing || flippedCard) {
             return;
         }
 
+        // a) Zablokuj další klikání, aby nešlo líznout vícekrát za sebou
         setIsDrawing(true);
 
         try {
-            // a) Stáhni aktuální deck z tabulky rooms. Vezmi první kartu (index 0) a odstraň ji z pole.
+            // Stáhni aktuální deck z tabulky rooms
             const { data: roomData, error: fetchErr } = await supabase
                 .from('rooms')
                 .select('*')
@@ -490,21 +496,35 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             // Vezmi první kartu (index 0) a odstraň ji z pole
             const drawnCard = currentDeck.shift();
 
-            // b) Pokud je karta 'killer':
+            // b) Spusť animaci otočení vrchní karty:
+            // 1. Broadcast pro soupeře v místnosti
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'card_flip',
+                    payload: {
+                        card: drawnCard,
+                        playerId: Number(user.id)
+                    }
+                });
+            }
+
+            // 2. Lokální animace otočení
+            triggerCardFlip(drawnCard);
+
+            // 3. Po otočení karty počkej pomocí setTimeout přibližně 1500 ms (1,5 vteřiny)
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+
+            // c) Teprve po uplynutí 1,5s proveď finální zápis do databáze
             if (drawnCard === 'killer') {
-                // Nastav aktuálnímu hráči v room_players hodnotu is_dead = true
-                const { error: deadErr } = await supabase
+                // Hráč vytáhl smrtící kartu: is_dead = true a game_status = 'finished'
+                await supabase
                     .from('room_players')
                     .update({ is_dead: true })
                     .eq('room_code', roomCode)
                     .eq('player_id', Number(user.id));
 
-                if (deadErr) {
-                    console.error('Chyba při nastavení is_dead:', deadErr);
-                }
-
-                // Nastav v rooms game_status = 'finished'
-                const { error: roomErr } = await supabase
+                await supabase
                     .from('rooms')
                     .update({
                         deck: currentDeck,
@@ -512,15 +532,8 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     })
                     .eq('room_code', roomCode);
 
-                if (roomErr) {
-                    console.error('Chyba při ukončení hry:', roomErr);
-                }
-
-                // Vyhoď Toast notifikaci "Vytáhl jsi smrtící kartu!"
                 notify('Vytáhl jsi smrtící kartu!', 'error');
-                addLog(`☠️ ${user.prezdivka} vytáhl smrtící kartu! Hra skončila.`, 'system');
 
-                // Okamžitá lokální aktualizace stavu
                 setDeck(currentDeck);
                 setGameStatus('finished');
                 setPlayers((prev) =>
@@ -529,8 +542,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     )
                 );
             } else {
-                // c) Pokud je karta 'safe':
-                // Zjisti, kdo hraje další. Najdi v seznamu hráčů dalšího v pořadí (musí být approved a !is_dead).
+                // Hráč vytáhl bezpečnou kartu: předání tahu dalšímu hráči
                 const { data: latestPlayers } = await supabase
                     .from('room_players')
                     .select('*, uzivatele(prezdivka)')
@@ -541,8 +553,6 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 const eligible = playerList.filter((p) => p.status === 'approved' && !p.is_dead);
 
                 let nextPlayerId = Number(user.id);
-                let nextPlayerName = user.prezdivka;
-
                 if (eligible.length > 0) {
                     const currentIndex = eligible.findIndex(
                         (p) => Number(p.player_id) === Number(user.id)
@@ -550,11 +560,9 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % eligible.length : 0;
                     const nextPlayer = eligible[nextIndex];
                     nextPlayerId = Number(nextPlayer.player_id);
-                    nextPlayerName = nextPlayer.uzivatele?.prezdivka || 'Další hráč';
                 }
 
-                // Updatuj tabulku rooms: ulož zmenšený deck a změň current_turn_player_id na ID dalšího hráče
-                const { error: updateErr } = await supabase
+                await supabase
                     .from('rooms')
                     .update({
                         deck: currentDeck,
@@ -562,15 +570,8 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     })
                     .eq('room_code', roomCode);
 
-                if (updateErr) {
-                    console.error('Chyba při aktualizaci tahu:', updateErr);
-                }
-
-                // Vyhoď Toast "Karta je bezpečná, uff."
                 notify('Karta je bezpečná, uff.', 'success');
-                addLog(`🍀 ${user.prezdivka} lízl bezpečnou kartu. Na tahu je ${nextPlayerName}.`, 'turn');
 
-                // Okamžitá lokální aktualizace stavu
                 setDeck(currentDeck);
                 setCurrentTurnPlayerId(nextPlayerId);
             }
@@ -578,6 +579,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             console.error('Chyba při lízání karty:', err);
             notify('Chyba při lízání karty: ' + err.message, 'error');
         } finally {
+            setFlippedCard(null);
             setIsDrawing(false);
         }
     };
@@ -598,15 +600,15 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             const { error } = await supabase
                 .from('rooms')
                 .update({
-                    deck: null,
+                    deck: [],
                     game_status: 'waiting',
-                    status: 'waiting',
-                    current_turn_player_id: null
+                    status: 'waiting'
                 })
                 .eq('room_code', roomCode);
 
             if (error) {
-                notify('Nepodařilo se resetovat hru: ' + error.message, 'error');
+                console.error('Chyba při resetování hry:', error);
+                notify('Chyba: ' + error.message, 'error');
             } else {
                 notify('Hra byla zresetována, návrat do laboratoře.', 'info');
             }
@@ -618,20 +620,14 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
 
     return (
         <div className="gameboard-container">
-            {/* Horní lišta herní desky */}
+            {/* Horní lišta herní desky: vlevo hráč, vpravo čisté tlačítko Opustit hru */}
             <header className="gameboard-topbar">
-                <div className="gameboard-room-info">
-                    <span>Laboratoř:</span>
-                    <span className="gameboard-room-code">{roomCode}</span>
-                    {roomName && <span className="gameboard-room-name">{roomName}</span>}
-                    {isHost && <span className="badge-host-crown">👑 Správce</span>}
-                </div>
-
                 <div className="topbar-user-badge">
                     <span className="topbar-label">Alchymista:</span>
                     <strong className={`topbar-player-name ${isMeDead ? 'text-dead' : ''}`}>
                         {user.prezdivka}
                     </strong>
+                    {isHost && <span className="badge-host-crown">👑 Správce</span>}
                     {isMeDead ? (
                         <span className="topbar-dead-badge">💀 MRTEV</span>
                     ) : isMyTurn ? (
@@ -640,17 +636,25 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                         </span>
                     ) : null}
                 </div>
+
+                <button
+                    type="button"
+                    onClick={onLeaveRoom}
+                    className="btn-topbar-leave"
+                    title="Opustit hru"
+                >
+                    Opustit hru
+                </button>
             </header>
 
-            {/* Hlavní rozvržení: Stůl + Postranní panel */}
+            {/* Hlavní rozvržení: Herní stůl přes celou šířku obrazovky */}
             <div className="gameboard-layout">
-                {/* Herní stůl */}
                 <main className="gameboard-table">
                     {/* 1. Horní zóna: Soupeři */}
                     <section className="opponents-zone" aria-label="Soupeři u stolu">
                         {opponents.length === 0 ? (
                             <div className="no-opponents-hint">
-                                Žádní další alchymisté u kotlíku.
+                                Žádní další alchymisté u stolu.
                             </div>
                         ) : (
                             opponents.map((opp) => {
@@ -699,39 +703,57 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                         )}
                     </section>
 
-                    {/* 2. Středová zóna: Balíček (klikací Tajemná karta pro hráče na tahu) */}
-                    <section className="roulette-center-zone" aria-label="Společný kotlík">
+                    {/* 2. Středová zóna: Balíček s 3D flip animací líznuté karty */}
+                    <section className="roulette-center-zone" aria-label="Balíček karet">
                         <div className="roulette-frame">
                             <div className="roulette-header">
-                                <span className="roulette-title">
-                                    <span className="roulette-icon">⚗️</span> Společný kotlík
-                                </span>
                                 <span className="roulette-deck-count">
-                                    🂠 {deck.length} karet v balíčku
+                                    🂠 {deck.length} {deck.length === 1 ? 'karta' : (deck.length >= 2 && deck.length <= 4 ? 'karty' : 'karet')} v balíčku
                                 </span>
                             </div>
 
-                            {/* Vizuál balíčku karet s přímou klikací událostí */}
+                            {/* Vizuál balíčku karet s 3D flip animací */}
                             <div className="roulette-deck-display">
-                                <div
-                                    className={`roulette-card-stack ${isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'is-clickable is-my-turn' : 'not-clickable'} ${isDrawing ? 'is-drawing' : ''}`}
-                                    onClick={isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing ? handleDrawCard : undefined}
-                                    role={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'button' : undefined}
-                                    tabIndex={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 0 : undefined}
-                                    title={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'Klikni pro líznutí karty' : undefined}
-                                >
-                                    <div className="card-layer layer-back-2"></div>
-                                    <div className="card-layer layer-back-1"></div>
-                                    <div className="card-layer layer-front">
-                                        <div className="card-sigil">✨</div>
-                                        <div className="card-label">TAJEMNÁ KARTA</div>
+                                <div className="card-flip-wrap">
+                                    {/* Spodní vrstvy balíčku pro fyzický efekt stohu karet */}
+                                    {deck.length > 2 && <div className="card-layer layer-back-2"></div>}
+                                    {deck.length > 1 && <div className="card-layer layer-back-1"></div>}
+
+                                    {/* Samotná vrchní karta s 3D flip animací */}
+                                    <div
+                                        className={`card-3d-flipper ${flippedCard?.isFlipped ? 'is-flipped' : ''} ${isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? 'is-clickable' : 'not-clickable'}`}
+                                        onClick={isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? handleDrawCard : undefined}
+                                        role={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'button' : undefined}
+                                        tabIndex={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 0 : undefined}
+                                        title={isMyTurn && !isMeDead && gameStatus !== 'finished' && !flippedCard ? 'Klikni pro líznutí karty' : undefined}
+                                    >
+                                        {/* Zadní strana karty (rub: tajemná karta se sigilem) */}
+                                        <div className="card-side card-side-back">
+                                            <div className="card-sigil">✨</div>
+                                            <div className="card-label">TAJEMNÁ KARTA</div>
+                                        </div>
+
+                                        {/* Přední strana karty (líc: po otočení - prázdná pro safe, 💀 pro killer) */}
+                                        <div className={`card-side card-side-front ${flippedCard?.card === 'killer' ? 'is-killer' : 'is-safe'}`}>
+                                            {flippedCard?.card === 'killer' && (
+                                                <div className="card-killer-skull" aria-label="Smrtící karta">
+                                                    💀
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Informační stavový řádek – bez duplicitních nápověd */}
+                            {/* Informační stavový řádek */}
                             <div className="roulette-status-info">
-                                {isMeDead ? (
+                                {flippedCard?.isFlipped ? (
+                                    flippedCard.card === 'killer' ? (
+                                        <p className="status-note dead">💀 Smrtící karta!</p>
+                                    ) : (
+                                        <p className="status-note safe">✨ Karta je bezpečná!</p>
+                                    )
+                                ) : isMeDead ? (
                                     <p className="status-note dead">
                                         💀 Byl jsi vyřazen smrtící kartou. Sleduj dohrání.
                                     </p>
@@ -739,7 +761,11 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                     <p className="status-note waiting">
                                         ⏳ Na tahu je {currentTurnPlayerName}...
                                     </p>
-                                ) : null}
+                                ) : (
+                                    <p className="status-note my-turn">
+                                        👉 Jsi na tahu! Klikni na balíček a otoč kartu.
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </section>
@@ -763,77 +789,10 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                         </div>
                     </section>
                 </main>
-
-                {/* 4. Pravý panel: Seznam hráčů, herní deník a ovládání */}
-                <aside className="gameboard-sidebar">
-                    {/* Seznam všech schválených hráčů */}
-                    <div className="sidebar-players-list">
-                        <div className="sidebar-section-header">
-                            <span>Učedníci u stolu ({approvedPlayers.length})</span>
-                            <span className="sidebar-alive-count">{alivePlayers.length} naživu</span>
-                        </div>
-
-                        <div className="sidebar-players-items">
-                            {approvedPlayers.map((p) => {
-                                const isTurn = Number(p.player_id) === Number(currentTurnPlayerId);
-                                const isDead = Boolean(p.is_dead);
-                                const isMe = Number(p.player_id) === Number(user.id);
-                                const pName = p.uzivatele?.prezdivka || 'Alchymista';
-
-                                return (
-                                    <div
-                                        key={p.id || p.player_id}
-                                        className={`sidebar-player-row ${isTurn && !isDead ? 'is-turn' : ''} ${isDead ? 'is-dead' : ''}`}
-                                    >
-                                        <div className="sidebar-player-info">
-                                            {isTurn && !isDead && <span className="turn-dot-pulse"></span>}
-                                            <span className={`sidebar-player-name ${isDead ? 'text-dead' : ''}`}>
-                                                {p.is_host ? '👑 ' : ''}{pName} {isMe ? '(Ty)' : ''}
-                                            </span>
-                                        </div>
-                                        {isDead ? (
-                                            <span className="sidebar-dead-label">💀 Mrtvý</span>
-                                        ) : isTurn ? (
-                                            <span className="sidebar-turn-label">Na tahu</span>
-                                        ) : (
-                                            <span className="sidebar-alive-label">Naživu</span>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Herní deník */}
-                    <div className="sidebar-section-header">
-                        <span>Herní deník</span>
-                        <span style={{ fontSize: '11px', color: '#6b7280' }}>Realtime</span>
-                    </div>
-
-                    <div className="log-container">
-                        {logs.map((log) => (
-                            <div key={log.id} className={`log-entry log-${log.type || 'normal'}`}>
-                                <span className="log-time">{log.time}</span>
-                                <span>{log.text}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Ovládací tlačítka v bočním panelu */}
-                    <div className="sidebar-controls">
-                        <button
-                            type="button"
-                            onClick={onLeaveRoom}
-                            className="btn-leave-game"
-                        >
-                            Opustit hru
-                        </button>
-                    </div>
-                </aside>
             </div>
 
             {/* ========================================================= */}
-            {/* 5. MODAL OKNO KONCE HRY A VÍTĚZ                           */}
+            {/* 4. MODAL OKNO KONCE HRY A VÍTĚZ                           */}
             {/* ========================================================= */}
             {gameStatus === 'finished' && (
                 <div className="game-over-modal-overlay" role="dialog" aria-modal="true">

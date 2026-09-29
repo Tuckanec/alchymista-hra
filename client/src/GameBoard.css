@@ -14,7 +14,7 @@
 
 /* Horní lišta herní desky */
 .gameboard-topbar {
-    height: 48px;
+    height: 52px;
     background: #14151e;
     border-bottom: 1px solid #242635;
     display: flex;
@@ -23,33 +23,7 @@
     padding: 0 20px;
     font-size: 13px;
     z-index: 10;
-}
-
-.gameboard-room-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.gameboard-room-code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-weight: 700;
-    color: #10b981;
-    background: #191a24;
-    padding: 3px 10px;
-    border-radius: 4px;
-    border: 1px solid #282a3a;
-    letter-spacing: 1px;
-}
-
-.gameboard-room-name {
-    font-weight: 600;
-    color: #e5e7eb;
-    background: rgba(255, 255, 255, 0.05);
-    padding: 2px 8px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    font-size: 12px;
+    box-sizing: border-box;
 }
 
 .badge-host-crown {
@@ -61,7 +35,7 @@
 .topbar-user-badge {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .topbar-label {
@@ -72,6 +46,7 @@
 .topbar-player-name {
     color: #f3f4f6;
     font-weight: 600;
+    font-size: 14px;
 }
 
 .topbar-turn-badge {
@@ -82,8 +57,9 @@
     color: #10b981;
     background: rgba(16, 185, 129, 0.15);
     border: 1px solid rgba(16, 185, 129, 0.35);
-    padding: 2px 8px;
+    padding: 3px 10px;
     border-radius: 12px;
+    font-weight: 600;
 }
 
 .topbar-dead-badge {
@@ -92,8 +68,27 @@
     color: #ef4444;
     background: rgba(239, 68, 68, 0.15);
     border: 1px solid rgba(239, 68, 68, 0.4);
-    padding: 2px 8px;
+    padding: 3px 10px;
     border-radius: 12px;
+}
+
+/* Malé čisté tlačítko Opustit hru v pravém horním rohu */
+.btn-topbar-leave {
+    background: transparent;
+    border: 1px solid #323548;
+    color: #9ca3af;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-topbar-leave:hover {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #ef4444;
 }
 
 /* Zelená pulzující tečka pro hráče na tahu */
@@ -121,7 +116,7 @@
     }
 }
 
-/* Zvýraznění mrtvého hráče: přeškrtnuté jméno a červený text */
+/* Zvýraznění mrtvého hráče */
 .text-dead {
     color: #ef4444 !important;
     text-decoration: line-through !important;
@@ -129,12 +124,13 @@
     opacity: 0.85;
 }
 
-/* Hlavní rozvržení */
+/* Hlavní rozvržení: celá šířka obrazovky bez postranního panelu */
 .gameboard-layout {
-    display: grid;
-    grid-template-columns: 1fr 310px;
+    display: flex;
+    flex-direction: column;
     flex: 1;
-    height: calc(100vh - 48px);
+    width: 100%;
+    height: calc(100vh - 52px);
     overflow: hidden;
 }
 
@@ -143,11 +139,14 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 16px 24px;
+    padding: 20px 24px;
     background: radial-gradient(circle at center, #151726 0%, #0c0d13 100%);
     overflow-y: auto;
     position: relative;
     gap: 16px;
+    flex: 1;
+    box-sizing: border-box;
+    width: 100%;
 }
 
 /* 1. Horní zóna: Soupeři */
@@ -158,6 +157,7 @@
     min-height: 80px;
     align-items: center;
     flex-wrap: wrap;
+    width: 100%;
 }
 
 .no-opponents-hint {
@@ -169,9 +169,9 @@
 .opponent-card {
     background: #161722;
     border: 1px solid #252838;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 10px 14px;
-    min-width: 150px;
+    min-width: 160px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -181,7 +181,7 @@
 .opponent-card.is-turn {
     border-color: #10b981;
     background: #141f1c;
-    box-shadow: 0 0 14px rgba(16, 185, 129, 0.22);
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
 }
 
 .opponent-card.is-dead {
@@ -280,13 +280,14 @@
     50% { opacity: 0.6; }
 }
 
-/* 2. Středová zóna: Společný kotlík */
+/* 2. Středová zóna: Balíček karet */
 .roulette-center-zone {
     display: flex;
     justify-content: center;
     align-items: center;
     margin: auto 0;
     padding: 10px 0;
+    width: 100%;
 }
 
 .roulette-frame {
@@ -294,97 +295,119 @@
     max-width: 440px;
     background: #141622;
     border: 1px solid #282c3f;
-    border-radius: 14px;
+    border-radius: 16px;
     padding: 24px 20px;
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 16px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.5);
+    box-sizing: border-box;
 }
 
 .roulette-header {
     width: 100%;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-}
-
-.roulette-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #e5e7eb;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.roulette-icon {
-    font-size: 18px;
 }
 
 .roulette-deck-count {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: #10b981;
     background: rgba(16, 185, 129, 0.12);
     border: 1px solid rgba(16, 185, 129, 0.3);
-    padding: 3px 9px;
-    border-radius: 6px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    letter-spacing: 0.3px;
 }
 
-/* Vizuál balíčku karet */
+/* =========================================================
+   3D ANIMACE OTÁČENÍ KARTY (CARD FLIP)
+   ========================================================= */
+
 .roulette-deck-display {
     position: relative;
-    width: 130px;
-    height: 180px;
+    width: 145px;
+    height: 205px;
     margin: 8px 0;
 }
 
-.roulette-card-stack {
+.card-flip-wrap {
     position: relative;
     width: 100%;
     height: 100%;
-    user-select: none;
-    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    perspective: 1000px;
 }
 
-.card-layer {
-    position: absolute;
+/* 3D obraceč karty */
+.card-3d-flipper {
+    position: relative;
     width: 100%;
     height: 100%;
-    border-radius: 12px;
-    background: #1b1d2a;
-    border: 1px solid #33384f;
-    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
+    border-radius: 14px;
+    user-select: none;
 }
 
-.layer-back-2 {
-    top: -8px;
-    left: 6px;
-    background: #151722;
-    border-color: #262a3c;
+/* Klikatelný stav pro hráče na tahu */
+.card-3d-flipper.is-clickable {
+    cursor: pointer;
 }
 
-.layer-back-1 {
-    top: -4px;
-    left: 3px;
-    background: #181a26;
-    border-color: #2d3146;
+.card-3d-flipper.is-clickable:hover {
+    transform: translateY(-8px) scale(1.04);
 }
 
-.layer-front {
-    top: 0;
-    left: 0;
-    background: linear-gradient(135deg, #1f2233 0%, #151724 100%);
-    border: 1px solid #3b405b;
+.card-3d-flipper.is-clickable:active {
+    transform: translateY(-2px) scale(1.01);
+}
+
+/* Klíčová 3D otočka o 180 stupňů */
+.card-3d-flipper.is-flipped {
+    transform: rotateY(180deg) scale(1.05);
+}
+
+/* Společný styl pro obě strany karty */
+.card-side {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 14px;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
+}
+
+/* Zadní strana karty (rub: tajemná karta se sigilem před otočením) */
+.card-side-back {
+    background: linear-gradient(135deg, #1f2233 0%, #151724 100%);
+    border: 1px solid #3b405b;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    transform: rotateY(0deg);
     gap: 10px;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.card-3d-flipper.is-clickable .card-side-back {
+    border-color: #10b981;
+    box-shadow: 0 0 18px rgba(16, 185, 129, 0.35);
+}
+
+.card-3d-flipper.is-clickable:hover .card-side-back {
+    border-color: #34d399;
+    box-shadow: 0 0 28px rgba(16, 185, 129, 0.6);
+}
+
+.card-3d-flipper.is-clickable .card-label {
+    color: #34d399;
 }
 
 .card-sigil {
@@ -401,50 +424,68 @@
     transition: color 0.2s ease;
 }
 
-/* Interakce pro hráče na tahu (KLIKACÍ BALÍČEK) */
-.roulette-card-stack.is-clickable {
-    cursor: pointer;
-}
-
-.roulette-card-stack.is-clickable .layer-front {
-    border-color: #10b981;
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.3);
-}
-
-.roulette-card-stack.is-clickable .card-label {
-    color: #34d399;
-}
-
-/* Hover efekt pro vizuální odezvu */
-.roulette-card-stack.is-clickable:hover {
-    transform: translateY(-8px) scale(1.04);
-}
-
-.roulette-card-stack.is-clickable:hover .layer-front {
-    border-color: #34d399;
-    box-shadow: 0 0 28px rgba(16, 185, 129, 0.55);
-}
-
-.roulette-card-stack.is-clickable:hover .card-sigil {
+.card-3d-flipper.is-clickable:hover .card-sigil {
     transform: scale(1.15) rotate(5deg);
 }
 
-.roulette-card-stack.is-clickable:active {
-    transform: translateY(-2px) scale(1.01);
+/* Přední strana karty (líc: po otočení o 180 stupňů) */
+.card-side-front {
+    transform: rotateY(180deg);
 }
 
-.roulette-card-stack.not-clickable {
-    cursor: default;
-    opacity: 0.85;
+/* Bezpečná karta (safe): naprosto prázdná plocha karty bez textu a ikon */
+.card-side-front.is-safe {
+    background: linear-gradient(145deg, #13241b 0%, #0c1611 100%);
+    border: 2px solid #10b981;
+    box-shadow: 0 0 28px rgba(16, 185, 129, 0.45), 0 12px 24px rgba(0, 0, 0, 0.6);
 }
 
-.roulette-card-stack.is-drawing {
-    animation: card-draw-anim 0.4s infinite alternate;
+/* Smrtící karta (killer): velká, výrazná lebka uprostřed */
+.card-side-front.is-killer {
+    background: linear-gradient(145deg, #2c0c10 0%, #160507 100%);
+    border: 2px solid #ef4444;
+    box-shadow: 0 0 35px rgba(239, 68, 68, 0.7), 0 12px 24px rgba(0, 0, 0, 0.7);
 }
 
-@keyframes card-draw-anim {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-4px); }
+.card-killer-skull {
+    font-size: 68px;
+    line-height: 1;
+    filter: drop-shadow(0 0 18px rgba(239, 68, 68, 0.9));
+    animation: skull-pulse-anim 1s infinite alternate ease-in-out;
+}
+
+@keyframes skull-pulse-anim {
+    0% {
+        transform: scale(0.92);
+        filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.7));
+    }
+    100% {
+        transform: scale(1.08);
+        filter: drop-shadow(0 0 24px rgba(239, 68, 68, 1));
+    }
+}
+
+/* Spodní vrstvy pro fyzický stoh karet balíčku */
+.card-flip-wrap .card-layer {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 14px;
+    pointer-events: none;
+}
+
+.card-flip-wrap .layer-back-2 {
+    top: -8px;
+    left: 6px;
+    background: #151722;
+    border: 1px solid #262a3c;
+}
+
+.card-flip-wrap .layer-back-1 {
+    top: -4px;
+    left: 3px;
+    background: #181a26;
+    border: 1px solid #2d3146;
 }
 
 /* Stavové zprávy */
@@ -465,14 +506,26 @@
     color: #9ca3af;
 }
 
+.status-note.my-turn {
+    color: #10b981;
+    font-weight: 600;
+}
+
 .status-note.dead {
     color: #ef4444;
+    font-weight: 600;
+}
+
+.status-note.safe {
+    color: #10b981;
+    font-weight: 600;
 }
 
 /* 3. Spodní zóna: Profil lokálního hráče */
 .my-zone {
     display: flex;
     justify-content: center;
+    width: 100%;
 }
 
 .my-card {
@@ -480,12 +533,13 @@
     max-width: 440px;
     background: #141620;
     border: 1px solid #232738;
-    border-radius: 10px;
-    padding: 12px 18px;
+    border-radius: 12px;
+    padding: 14px 20px;
     display: flex;
     flex-direction: column;
     gap: 6px;
     transition: all 0.2s ease;
+    box-sizing: border-box;
 }
 
 .my-card.is-turn {
@@ -512,7 +566,7 @@
 }
 
 .my-name {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
     color: #f3f4f6;
 }
@@ -522,7 +576,7 @@
     color: #10b981;
     background: rgba(16, 185, 129, 0.12);
     border: 1px solid rgba(16, 185, 129, 0.3);
-    padding: 1px 6px;
+    padding: 2px 7px;
     border-radius: 4px;
 }
 
@@ -533,220 +587,61 @@
     background: rgba(239, 68, 68, 0.18);
     border: 1px solid rgba(239, 68, 68, 0.4);
     padding: 2px 8px;
-    border-radius: 10px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
 }
 
-/* 4. Pravý panel: Seznam hráčů, deník a ovládání */
-.gameboard-sidebar {
-    background: #13141d;
-    border-left: 1px solid #232635;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
+/* =========================================================
+   4. MODAL OKNO KONCE HRY A VÍTĚZ
+   ========================================================= */
 
-.sidebar-players-list {
-    border-bottom: 1px solid #232635;
-    max-height: 220px;
-    display: flex;
-    flex-direction: column;
-}
-
-.sidebar-alive-count {
-    font-size: 11px;
-    color: #10b981;
-    font-weight: 600;
-}
-
-.sidebar-players-items {
-    overflow-y: auto;
-    padding: 8px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.sidebar-player-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 6px 10px;
-    border-radius: 6px;
-    background: #181924;
-    font-size: 12px;
-    border: 1px solid transparent;
-}
-
-.sidebar-player-row.is-turn {
-    border-color: #10b981;
-    background: #15221d;
-}
-
-.sidebar-player-row.is-dead {
-    border-color: rgba(239, 68, 68, 0.3);
-    background: #1c1114;
-    opacity: 0.75;
-}
-
-.sidebar-player-info {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.sidebar-player-name {
-    font-weight: 600;
-    color: #e5e7eb;
-}
-
-.sidebar-dead-label {
-    font-size: 10px;
-    color: #ef4444;
-    font-weight: 600;
-}
-
-.sidebar-turn-label {
-    font-size: 10px;
-    color: #10b981;
-    font-weight: 600;
-}
-
-.sidebar-alive-label {
-    font-size: 10px;
-    color: #6b7280;
-}
-
-.sidebar-section-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid #232635;
-    font-size: 13px;
-    font-weight: 600;
-    color: #e5e7eb;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.log-container {
-    flex: 1;
-    overflow-y: auto;
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.log-entry {
-    font-size: 12px;
-    line-height: 1.4;
-    color: #9ca3af;
-    border-left: 2px solid #2b2e40;
-    padding-left: 8px;
-}
-
-.log-entry.log-system {
-    border-color: #3b82f6;
-    color: #bfdbfe;
-}
-
-.log-entry.log-turn {
-    border-color: #10b981;
-    color: #d1fae5;
-}
-
-.log-time {
-    font-size: 10px;
-    color: #4b5563;
-    margin-right: 4px;
-}
-
-.sidebar-controls {
-    padding: 16px;
-    border-top: 1px solid #232635;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    background: #11121a;
-}
-
-.btn-leave-game {
-    width: 100%;
-    padding: 9px;
-    background: transparent;
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    color: #ef4444;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.btn-leave-game:hover {
-    background: rgba(239, 68, 68, 0.12);
-    border-color: #ef4444;
-}
-
-/* ========================================================= */
-/* 5. MODAL OKNO KONCE HRY A VÍTĚZ                           */
-/* ========================================================= */
 .game-over-modal-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(8, 9, 15, 0.88);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
     backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    padding: 20px;
-    animation: modal-fade-in 0.3s ease;
+    padding: 16px;
+    box-sizing: border-box;
+    animation: fadeInModal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes modal-fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+@keyframes fadeInModal {
+    from { opacity: 0; transform: scale(0.94); }
+    to { opacity: 1; transform: scale(1); }
 }
 
 .game-over-modal-card {
     background: #161824;
-    border: 1px solid #2d3247;
+    border: 1px solid #2d3248;
     border-radius: 16px;
-    padding: 36px 32px;
+    padding: 36px 28px;
+    max-width: 420px;
     width: 100%;
-    max-width: 440px;
     text-align: center;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(245, 158, 11, 0.15);
-    animation: modal-scale-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes modal-scale-in {
-    from {
-        transform: scale(0.9);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-    }
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(245, 158, 11, 0.15);
+    box-sizing: border-box;
 }
 
 .game-over-trophy {
-    font-size: 52px;
-    line-height: 1;
-    margin-bottom: 8px;
-    filter: drop-shadow(0 4px 12px rgba(245, 158, 11, 0.4));
+    font-size: 56px;
+    margin-bottom: 12px;
+    filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.6));
+    animation: trophyBounce 1.6s infinite ease-in-out;
+}
+
+@keyframes trophyBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
 }
 
 .game-over-heading {
-    margin: 0 0 18px 0;
-    font-size: 18px;
+    margin: 0 0 16px 0;
+    font-size: 20px;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 2px;
     color: #9ca3af;
 }
 
@@ -826,14 +721,6 @@
     gap: 8px;
 }
 
-.pulse-dot-small {
-    width: 6px;
-    height: 6px;
-    background: #f59e0b;
-    border-radius: 50%;
-    animation: turn-pulse 1s infinite ease-in-out;
-}
-
 .btn-leave-permanently {
     width: 100%;
     padding: 10px 18px;
@@ -852,13 +739,23 @@
     border-color: #ef4444;
 }
 
-@media (max-width: 860px) {
-    .gameboard-layout {
-        grid-template-columns: 1fr;
-        grid-template-rows: 1fr 240px;
+/* Responzivní doladění */
+@media (max-width: 600px) {
+    .gameboard-table {
+        padding: 12px 14px;
+        gap: 12px;
     }
-    .gameboard-sidebar {
-        border-left: none;
-        border-top: 1px solid #232635;
+
+    .roulette-frame {
+        padding: 18px 14px;
+    }
+
+    .roulette-deck-display {
+        width: 130px;
+        height: 185px;
+    }
+
+    .card-killer-skull {
+        font-size: 56px;
     }
 }
