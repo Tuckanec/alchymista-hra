@@ -21,6 +21,12 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     // Stav otočení karty: null | { card: 'safe' | 'killer', isFlipped: boolean }
     const [flippedCard, setFlippedCard] = useState(null);
 
+    // Příznak animace přesunu karty z balíčku do ruky
+    const [isFlyingToHand, setIsFlyingToHand] = useState(false);
+
+    // Příznak úvodní animace rozdání 5 karet
+    const [isDealingAnimation, setIsDealingAnimation] = useState(true);
+
     // Sledování odpojených hráčů a jejich zbývajícího času { [playerId]: seconds }
     const [disconnectedPlayers, setDisconnectedPlayers] = useState({});
 
@@ -93,6 +99,17 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     useEffect(() => {
         playersRef.current = players;
     }, [players]);
+
+    // Úvodní animace rozdání 5 karet při startu a restartu hry
+    useEffect(() => {
+        if (gameStatus === 'playing') {
+            setIsDealingAnimation(true);
+            const timer = setTimeout(() => {
+                setIsDealingAnimation(false);
+            }, 1600);
+            return () => clearTimeout(timer);
+        }
+    }, [gameStatus]);
 
     // =========================================================
     // 1. SUPABASE REALTIME: PRESENCE, BROADCAST & POSTGRES CHANGES
@@ -202,9 +219,19 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             .on('broadcast', { event: 'card_flip' }, ({ payload }) => {
                 if (payload?.card) {
                     triggerCardFlipRef.current?.(payload.card);
-                    setTimeout(() => {
-                        setFlippedCard(null);
-                    }, 1700);
+                    if (payload.card === 'safe') {
+                        setTimeout(() => {
+                            setIsFlyingToHand(true);
+                            setTimeout(() => {
+                                setIsFlyingToHand(false);
+                                setFlippedCard(null);
+                            }, 500);
+                        }, 500);
+                    } else {
+                        setTimeout(() => {
+                            setFlippedCard(null);
+                        }, 1700);
+                    }
                 }
             })
 
@@ -445,6 +472,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     // ODVOZENÉ STAVY PRO UI
     // =========================================================
     const myPlayer = players.find((p) => Number(p.player_id) === Number(user.id));
+    const myHand = Array.isArray(myPlayer?.hand) ? myPlayer.hand : [];
     const isMeDead = Boolean(myPlayer?.is_dead);
     const isMyTurn = currentTurnPlayerId !== null && Number(currentTurnPlayerId) === Number(user.id);
     const opponents = players.filter((p) => Number(p.player_id) !== Number(user.id));
@@ -465,7 +493,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     // =========================================================
     const handleDrawCard = async () => {
         // Kontrola oprávnění: pouze hráč na tahu, nesmí být mrtev, hra nesmí být u konce, nesmí probíhat lízání
-        if (!isMyTurn || isMeDead || gameStatus === 'finished' || isDrawing || flippedCard) {
+        if (!isMyTurn || isMeDead || gameStatus !== 'playing' || isDrawing || flippedCard) {
             return;
         }
 
@@ -512,12 +540,11 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             // 2. Lokální animace otočení
             triggerCardFlip(drawnCard);
 
-            // 3. Po otočení karty počkej pomocí setTimeout přibližně 1500 ms (1,5 vteřiny)
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-
-            // c) Teprve po uplynutí 1,5s proveď finální zápis do databáze
+            // c) Vyhodnocení typu karty
             if (drawnCard === 'killer') {
-                // Hráč vytáhl smrtící kartu: is_dead = true a game_status = 'finished'
+                // b) Pokud je karta 'killer' (💀): Zůstane otočená na balíčku, nepřesouvá se do ruky a po 1500 ms se hra ukončí jako dosud.
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+
                 await supabase
                     .from('room_players')
                     .update({ is_dead: true })
@@ -532,8 +559,6 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     })
                     .eq('room_code', roomCode);
 
-                notify('Vytáhl jsi smrtící kartu!', 'error');
-
                 setDeck(currentDeck);
                 setGameStatus('finished');
                 setPlayers((prev) =>
@@ -542,7 +567,17 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     )
                 );
             } else {
-                // Hráč vytáhl bezpečnou kartu: předání tahu dalšímu hráči
+                // c) Pokud je karta 'safe' (prázdná):
+                // Po krátkém zobrazení (cca 500 ms po otočení) spusť CSS animaci přesunu (transform: translate(...) scale(...)),
+                // kdy tato karta plynule sjede z balíčku dolů do ruky hráče.
+                await new Promise((resolve) => setTimeout(resolve, 500));
+
+                setIsFlyingToHand(true);
+
+                // Čas na dokončení přesunu do ruky (cca 500 ms)
+                await new Promise((resolve) => setTimeout(resolve, 500));
+
+                // Jakmile animace doběhne, přidej kartu 'safe' do hráčova pole hand v room_players, aktualizuj deck a předej tah dalšímu hráči.
                 const { data: latestPlayers } = await supabase
                     .from('room_players')
                     .select('*, uzivatele(prezdivka)')
@@ -550,6 +585,10 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     .order('joined_at', { ascending: true });
 
                 const playerList = latestPlayers || playersRef.current;
+                const meInDb = playerList.find((p) => Number(p.player_id) === Number(user.id));
+                const currentHand = Array.isArray(meInDb?.hand) ? meInDb.hand : (Array.isArray(myPlayer?.hand) ? myPlayer.hand : []);
+                const updatedHand = [...currentHand, 'safe'];
+
                 const eligible = playerList.filter((p) => p.status === 'approved' && !p.is_dead);
 
                 let nextPlayerId = Number(user.id);
@@ -563,6 +602,12 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 }
 
                 await supabase
+                    .from('room_players')
+                    .update({ hand: updatedHand })
+                    .eq('room_code', roomCode)
+                    .eq('player_id', Number(user.id));
+
+                await supabase
                     .from('rooms')
                     .update({
                         deck: currentDeck,
@@ -570,51 +615,80 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     })
                     .eq('room_code', roomCode);
 
-                notify('Karta je bezpečná, uff.', 'success');
-
                 setDeck(currentDeck);
                 setCurrentTurnPlayerId(nextPlayerId);
+                setPlayers((prev) =>
+                    prev.map((p) =>
+                        Number(p.player_id) === Number(user.id) ? { ...p, hand: updatedHand } : p
+                    )
+                );
             }
         } catch (err) {
             console.error('Chyba při lízání karty:', err);
             notify('Chyba při lízání karty: ' + err.message, 'error');
         } finally {
+            setIsFlyingToHand(false);
             setFlippedCard(null);
             setIsDrawing(false);
         }
     };
 
     // =========================================================
-    // NÁVRAT DO LABORATOŘE (HOST ACTION PO SKONČENÍ HRY)
+    // NÁVRAT DO LABORATOŘE / HRÁT ZNOVU (HOST ACTION PO SKONČENÍ HRY)
     // =========================================================
     const handleResetToLobby = async () => {
         if (!isHostRef.current) return;
         try {
-            // 1. Nastaví všem is_dead = false
+            // 1. Nastaví všem schváleným hráčům výchozí ruku s 5 prázdnými kartami a is_dead = false
+            const initialHand = ['safe', 'safe', 'safe', 'safe', 'safe'];
             await supabase
                 .from('room_players')
-                .update({ is_dead: false })
-                .eq('room_code', roomCode);
+                .update({
+                    is_dead: false,
+                    hand: initialHand
+                })
+                .eq('room_code', roomCode)
+                .eq('status', 'approved');
 
-            // 2. Vymaže balíček a změní status na waiting
+            // 2. Teprve poté vygeneruj a zamíchej zbylý dobírací balíček (deck) se smrtícími kartami
+            const newDeck = [...Array(25).fill('safe'), ...Array(2).fill('killer')];
+            for (let i = newDeck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
+            }
+
+            // Začínající hráč
+            const approved = playersRef.current.filter((p) => p.status === 'approved');
+            const startingId = approved.length > 0 ? Number(approved[0].player_id) : Number(user.id);
+
             const { error } = await supabase
                 .from('rooms')
                 .update({
-                    deck: [],
-                    game_status: 'waiting',
-                    status: 'waiting'
+                    deck: newDeck,
+                    game_status: 'playing',
+                    status: 'playing',
+                    current_turn_player_id: startingId
                 })
                 .eq('room_code', roomCode);
 
             if (error) {
-                console.error('Chyba při resetování hry:', error);
+                console.error('Chyba při restartu hry:', error);
                 notify('Chyba: ' + error.message, 'error');
             } else {
-                notify('Hra byla zresetována, návrat do laboratoře.', 'info');
+                setDeck(newDeck);
+                setGameStatus('playing');
+                setCurrentTurnPlayerId(startingId);
+                setFlippedCard(null);
+                setIsDealingAnimation(true);
+                setPlayers((prev) =>
+                    prev.map((p) =>
+                        p.status === 'approved' ? { ...p, is_dead: false, hand: initialHand } : p
+                    )
+                );
             }
         } catch (err) {
-            console.error('Chyba při resetování laboratoře:', err);
-            notify('Chyba při návratu do laboratoře.', 'error');
+            console.error('Chyba při restartování hry:', err);
+            notify('Chyba při spuštění nové hry.', 'error');
         }
     };
 
@@ -692,7 +766,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                         </div>
 
                                         <div className="opponent-meta">
-                                            <span>{opp.is_guest ? 'Host' : 'Učedník'}</span>
+                                            <span className="opponent-hand-count">🂠 {opp.hand?.length || 0} v ruce</span>
                                             <span className={`opponent-status-tag ${isOppDead ? 'tag-dead' : isOppTurn ? 'tag-turn' : 'tag-waiting'}`}>
                                                 {isOppDead ? 'Vyřazen' : isOppTurn ? 'Líže kartu' : 'Čeká'}
                                             </span>
@@ -721,7 +795,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
 
                                     {/* Samotná vrchní karta s 3D flip animací */}
                                     <div
-                                        className={`card-3d-flipper ${flippedCard?.isFlipped ? 'is-flipped' : ''} ${isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? 'is-clickable' : 'not-clickable'}`}
+                                        className={`card-3d-flipper ${flippedCard?.isFlipped ? 'is-flipped' : ''} ${isFlyingToHand ? 'is-flying-to-hand' : ''} ${isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? 'is-clickable' : 'not-clickable'}`}
                                         onClick={isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? handleDrawCard : undefined}
                                         role={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'button' : undefined}
                                         tabIndex={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 0 : undefined}
@@ -770,8 +844,27 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                         </div>
                     </section>
 
-                    {/* 3. Spodní zóna: Můj profil hráče */}
-                    <section className="my-zone" aria-label="Můj profil">
+                    {/* 3. Spodní zóna: Moje ruka a profil hráče */}
+                    <section className="my-zone" aria-label="Moje ruka a profil">
+                        {/* Ruka hráče */}
+                        <div className="my-hand-container">
+                            <div className="my-hand-cards">
+                                {myHand.map((cardType, idx) => (
+                                    <div
+                                        key={idx}
+                                        className={`my-hand-card ${isDealingAnimation ? 'deal-fly-in' : ''}`}
+                                        style={{
+                                            animationDelay: isDealingAnimation ? `${idx * 120}ms` : undefined,
+                                            zIndex: idx + 1
+                                        }}
+                                        title={`Bezpečná karta (${idx + 1}/${myHand.length})`}
+                                    >
+                                        <div className="hand-card-inner"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className={`my-card ${isMyTurn && !isMeDead ? 'is-turn' : ''} ${isMeDead ? 'is-dead' : ''}`}>
                             <div className="my-card-header">
                                 <div className="my-name-wrap">
@@ -782,9 +875,14 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                     {isHost && <span className="host-badge">👑 Správce</span>}
                                 </div>
 
-                                {isMeDead && (
-                                    <span className="dead-tag">💀 VYŘAZEN</span>
-                                )}
+                                <div className="my-meta-right">
+                                    <span className="my-hand-counter">
+                                        🂠 {myHand.length} {myHand.length === 1 ? 'karta' : (myHand.length >= 2 && myHand.length <= 4 ? 'karty' : 'karet')} v ruce
+                                    </span>
+                                    {isMeDead && (
+                                        <span className="dead-tag">💀 VYŘAZEN</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </section>

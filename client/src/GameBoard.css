@@ -241,6 +241,20 @@
     align-items: center;
     font-size: 11px;
     color: #9ca3af;
+    gap: 8px;
+}
+
+.opponent-hand-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 2px 7px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .opponent-status-tag {
@@ -369,6 +383,15 @@
 /* Klíčová 3D otočka o 180 stupňů */
 .card-3d-flipper.is-flipped {
     transform: rotateY(180deg) scale(1.05);
+}
+
+/* Animace přesunu líznuté karty z balíčku dolů do ruky hráče */
+.card-3d-flipper.is-flying-to-hand {
+    transform: translateY(220px) scale(0.48) rotateY(180deg) !important;
+    opacity: 0.25;
+    transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.5s ease-in !important;
+    pointer-events: none;
+    z-index: 100;
 }
 
 /* Společný styl pro obě strany karty */
@@ -521,11 +544,93 @@
     font-weight: 600;
 }
 
-/* 3. Spodní zóna: Profil lokálního hráče */
+/* 3. Spodní zóna: Ruka a profil lokálního hráče */
 .my-zone {
     display: flex;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
     width: 100%;
+    gap: 10px;
+    z-index: 2;
+}
+
+/* Ruka hráče */
+.my-hand-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    padding: 8px 12px 2px 12px;
+    box-sizing: border-box;
+}
+
+.my-hand-cards {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    flex-wrap: nowrap;
+    position: relative;
+    padding: 8px 12px;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+}
+
+/* Jednotlivá karta v ruce: čistý, elegantní flat design */
+.my-hand-card {
+    position: relative;
+    width: 66px;
+    height: 94px;
+    border-radius: 8px;
+    background: #141722;
+    border: 1.5px solid #2d344a;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    margin: 0 -4px;
+    transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+    cursor: default;
+    flex-shrink: 0;
+    user-select: none;
+    box-sizing: border-box;
+}
+
+.my-hand-card:hover {
+    transform: translateY(-10px) scale(1.06);
+    border-color: #10b981;
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3), 0 2px 8px rgba(0, 0, 0, 0.6);
+    z-index: 60 !important;
+}
+
+/* Vnitřní plocha prázdné karty */
+.hand-card-inner {
+    width: 100%;
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(145deg, #181d2c 0%, #10121c 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    box-sizing: border-box;
+}
+
+/* Úvodní animace rozdání karet z balíčku do ruky */
+.my-hand-card.deal-fly-in {
+    animation: dealFlyIn 0.55s cubic-bezier(0.18, 0.89, 0.32, 1.1) backwards;
+}
+
+@keyframes dealFlyIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-240px) scale(1.4) rotate(4deg);
+    }
+    30% {
+        opacity: 0.9;
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
 }
 
 .my-card {
@@ -578,6 +683,25 @@
     border: 1px solid rgba(16, 185, 129, 0.3);
     padding: 2px 7px;
     border-radius: 4px;
+}
+
+.my-meta-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.my-hand-counter {
+    font-size: 11px;
+    font-weight: 600;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 2px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .dead-tag {
@@ -732,5 +856,29 @@
 
     .card-killer-skull {
         font-size: 56px;
+    }
+
+    .my-hand-card {
+        width: 50px;
+        height: 72px;
+        margin: 0 -5px;
+    }
+
+    .card-3d-flipper.is-flying-to-hand {
+        transform: translateY(180px) scale(0.4) rotateY(180deg) !important;
+    }
+
+    @keyframes dealFlyIn {
+        0% {
+            opacity: 0;
+            transform: translateY(-180px) scale(1.3) rotate(4deg);
+        }
+        30% {
+            opacity: 0.9;
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0) scale(1) rotate(0deg);
+        }
     }
 }

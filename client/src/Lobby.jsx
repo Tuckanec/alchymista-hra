@@ -613,7 +613,18 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
         }
 
         try {
-            // Vygeneruje pole: 25 řetězců 'safe' a 2 řetězce 'killer'. Pole náhodně zamíchej (shuffle).
+            // 1. Nastav v databázi všem schváleným hráčům v místnosti výchozí ruku s 5 prázdnými kartami
+            const initialHand = ['safe', 'safe', 'safe', 'safe', 'safe'];
+            await supabase
+                .from('room_players')
+                .update({
+                    is_dead: false,
+                    hand: initialHand
+                })
+                .eq('room_code', currentRoom)
+                .eq('status', 'approved');
+
+            // 2. Teprve poté vygeneruj a zamíchej zbylý dobírací balíček (deck) se smrtícími kartami
             const deck = [...Array(25).fill('safe'), ...Array(2).fill('killer')];
             for (let i = deck.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -622,12 +633,6 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
 
             // Určení začínajícího hráče: ID vybrané vlaječkou/kostkou nebo ID hosta
             let chosenPlayerId = Number(effectiveStartingPlayerId) || Number(user.id);
-
-            // Reset is_dead pro všechny schválené hráče
-            await supabase
-                .from('room_players')
-                .update({ is_dead: false })
-                .eq('room_code', currentRoom);
 
             // Update tabulky rooms: ulož zamíchané pole do deck, game_status = 'playing', current_turn_player_id
             const { error } = await supabase
