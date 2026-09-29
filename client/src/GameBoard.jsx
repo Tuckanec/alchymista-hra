@@ -21,8 +21,8 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     // Stav otočení karty: null | { card: 'safe' | 'killer', isFlipped: boolean }
     const [flippedCard, setFlippedCard] = useState(null);
 
-    // Příznak animace přesunu karty z balíčku do ruky
-    const [isFlyingToHand, setIsFlyingToHand] = useState(false);
+    // Cíl animace přesunu dobrané karty: 'player' (dolů do ruky) | 'opponent' (nahoru k soupeřům) | null
+    const [flyingTarget, setFlyingTarget] = useState(null);
 
     // Příznak úvodní animace rozdání 5 karet
     const [isDealingAnimation, setIsDealingAnimation] = useState(true);
@@ -105,13 +105,13 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
         playersRef.current = players;
     }, [players]);
 
-    // Úvodní animace rozdání 5 karet při startu a restartu hry
+    // Úvodní animace rozdání 5 karet při startu hry
     useEffect(() => {
         if (gameStatus === 'playing') {
             setIsDealingAnimation(true);
             const timer = setTimeout(() => {
                 setIsDealingAnimation(false);
-            }, 1600);
+            }, 2200);
             return () => clearTimeout(timer);
         }
     }, [gameStatus]);
@@ -226,9 +226,9 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     triggerCardFlipRef.current?.(payload.card);
                     if (payload.card === 'safe') {
                         setTimeout(() => {
-                            setIsFlyingToHand(true);
+                            setFlyingTarget('opponent');
                             setTimeout(() => {
-                                setIsFlyingToHand(false);
+                                setFlyingTarget(null);
                                 setFlippedCard(null);
                             }, 500);
                         }, 500);
@@ -573,14 +573,17 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 );
             } else {
                 // c) Pokud je karta 'safe' (prázdná):
-                // Po krátkém zobrazení (cca 500 ms po otočení) spusť CSS animaci přesunu (transform: translate(...) scale(...)),
-                // kdy tato karta plynule sjede z balíčku dolů do ruky hráče.
+                // Po krátkém zobrazení (cca 500 ms po otočení) spusť CSS animaci přesunu dolů do ruky
                 await new Promise((resolve) => setTimeout(resolve, 500));
 
-                setIsFlyingToHand(true);
+                setFlyingTarget('player');
 
-                // Čas na dokončení přesunu do ruky (cca 500 ms)
+                // Čas na dokončení přesunu do ruky (přesně 500 ms, během kterých karta v animaci zmizí)
                 await new Promise((resolve) => setTimeout(resolve, 500));
+
+                // Okamžitě v momentě dokončení animace vyčisti lokální stav animované karty, aby nezůstala viset
+                setFlyingTarget(null);
+                setFlippedCard(null);
 
                 // Jakmile animace doběhne, přidej kartu 'safe' do hráčova pole hand v room_players, aktualizuj deck a předej tah dalšímu hráči.
                 const { data: latestPlayers } = await supabase
@@ -632,7 +635,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             console.error('Chyba při lízání karty:', err);
             notify('Chyba při lízání karty: ' + err.message, 'error');
         } finally {
-            setIsFlyingToHand(false);
+            setFlyingTarget(null);
             setFlippedCard(null);
             setIsDrawing(false);
         }
@@ -783,7 +786,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
 
                                     {/* Samotná vrchní karta s 3D flip animací */}
                                     <div
-                                        className={`card-3d-flipper ${flippedCard?.isFlipped ? 'is-flipped' : ''} ${isFlyingToHand ? 'is-flying-to-hand' : ''} ${isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? 'is-clickable' : 'not-clickable'}`}
+                                        className={`card-3d-flipper ${flippedCard?.isFlipped ? 'is-flipped' : ''} ${flyingTarget === 'player' ? 'is-flying-to-hand' : flyingTarget === 'opponent' ? 'is-flying-to-opponent' : ''} ${isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? 'is-clickable' : 'not-clickable'}`}
                                         onClick={isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? handleDrawCard : undefined}
                                         role={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'button' : undefined}
                                         tabIndex={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 0 : undefined}
@@ -812,9 +815,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                 {flippedCard?.isFlipped ? (
                                     flippedCard.card === 'killer' ? (
                                         <p className="status-note dead">💀 Smrtící karta!</p>
-                                    ) : (
-                                        <p className="status-note safe">✨ Karta je bezpečná!</p>
-                                    )
+                                    ) : null
                                 ) : isMeDead ? (
                                     <p className="status-note dead">
                                         💀 Byl jsi vyřazen smrtící kartou. Sleduj dohrání.
@@ -842,7 +843,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                         key={idx}
                                         className={`my-hand-card ${isDealingAnimation ? 'deal-fly-in' : ''}`}
                                         style={{
-                                            animationDelay: isDealingAnimation ? `${idx * 120}ms` : undefined,
+                                            animationDelay: isDealingAnimation ? `${idx * 220}ms` : undefined,
                                             zIndex: idx + 1
                                         }}
                                         title={`Bezpečná karta (${idx + 1}/${myHand.length})`}

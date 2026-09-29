@@ -119,11 +119,10 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
 
         const fetchRooms = async () => {
             try {
-                // Supabase implicitní join přes cizí klíč host_id -> uzivatele(id)
-                // POUZE VEŘEJNÉ MÍSTNOSTI (.eq('is_public', true))
+                // POUZE VEŘEJNÉ MÍSTNOSTI (.eq('is_public', true)) včetně schválených hráčů z room_players
                 const { data, error } = await supabase
                     .from('rooms')
-                    .select('*, uzivatele(prezdivka)')
+                    .select('*, room_players(id, status)')
                     .eq('is_public', true)
                     .order('created_at', { ascending: false });
 
@@ -131,7 +130,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                     setActiveRooms(data);
                 }
             } catch (err) {
-                console.error('Chyba při načítání laboratoří:', err);
+                console.error('Chyba při načítání párty:', err);
             }
         };
 
@@ -142,6 +141,13 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'rooms' },
+                () => {
+                    fetchRooms();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'room_players' },
                 () => {
                     fetchRooms();
                 }
@@ -1320,19 +1326,21 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                         </div>
                                     )}
 
-                                    {/* Seznam aktivních laboratoří v reálném čase */}
+                                    {/* Seznam aktivních párty v reálném čase */}
                                     <div className="active-rooms-section">
                                         <div className="active-rooms-header">
-                                            <h3>Aktivní laboratoře ({activeRooms.length})</h3>
+                                            <h3>Aktivní párty ({activeRooms.length})</h3>
                                             <span className="realtime-pill">Live</span>
                                         </div>
 
                                         {activeRooms.length === 0 ? (
-                                            <p className="empty-rooms-text">Aktuálně není otevřena žádná veřejná laboratoř. Založ novou!</p>
+                                            <p className="empty-rooms-text">Aktuálně není otevřena žádná veřejná párty. Založ novou!</p>
                                         ) : (
                                             <ul className="active-rooms-list">
                                                 {activeRooms.map((room) => {
-                                                    const hostDisplayName = room.uzivatele?.prezdivka || 'Neznámý';
+                                                    const approvedCount = Array.isArray(room.room_players)
+                                                        ? room.room_players.filter((p) => p.status === 'approved').length
+                                                        : 0;
                                                     return (
                                                         <li key={room.id || room.room_code} className="active-room-item">
                                                             <div className="active-room-info">
@@ -1340,8 +1348,8 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                                 {room.room_name && (
                                                                     <div className="active-room-name">{room.room_name}</div>
                                                                 )}
-                                                                <div className="active-room-host">
-                                                                    Správce: <strong>{hostDisplayName}</strong>
+                                                                <div className="active-room-players-count">
+                                                                    Hráči: <strong>{approvedCount}/5</strong>
                                                                 </div>
                                                             </div>
                                                             <button
@@ -1349,7 +1357,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                                 disabled={loading}
                                                                 onClick={() => {
                                                                     if (!user) {
-                                                                        notify('Pro vstup do laboratoře se musíš přihlásit.', 'info');
+                                                                        notify('Pro vstup do párty se musíš přihlásit.', 'info');
                                                                         setShowAuthModal(true);
                                                                         return;
                                                                     }
