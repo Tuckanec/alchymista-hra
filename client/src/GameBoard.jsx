@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { supabase } from './supabaseClient';
 import './GameBoard.css';
 
@@ -23,6 +24,19 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
 
     // Cíl animace přesunu dobrané karty: 'player' (dolů do ruky) | 'opponent' (nahoru k soupeřům) | null
     const [flyingTarget, setFlyingTarget] = useState(null);
+
+    // Příznak zobrazení placeholder slotu na konci ruky pro plynulé posunutí karet
+    const [showHandSlot, setShowHandSlot] = useState(false);
+
+    // Dynamické CSS proměnné pro přesný let karty (--tx, --ty, --scale)
+    const [flyingStyle, setFlyingStyle] = useState({});
+
+    // Reference na elementy pro přesné měření souřadnic letu karty
+    const deckRef = useRef(null);
+    const targetSlotRef = useRef(null);
+    const handCardsContainerRef = useRef(null);
+    const opponentRefs = useRef({});
+    const currentTurnPlayerIdRef = useRef(null);
 
     // Příznak úvodní animace rozdání 5 karet
     const [isDealingAnimation, setIsDealingAnimation] = useState(true);
@@ -104,6 +118,64 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
     useEffect(() => {
         playersRef.current = players;
     }, [players]);
+
+    useEffect(() => {
+        currentTurnPlayerIdRef.current = currentTurnPlayerId;
+    }, [currentTurnPlayerId]);
+
+    // Obsluha animace otočení a přesunu karty pro soupeře
+    const handleOpponentCardFlip = useCallback((cardType, drawingPlayerId) => {
+        triggerCardFlip(cardType);
+        if (cardType === 'safe') {
+            setTimeout(() => {
+                const oppId = drawingPlayerId !== undefined ? Number(drawingPlayerId) : currentTurnPlayerIdRef.current;
+                const oppEl = (oppId && (opponentRefs.current[oppId] || opponentRefs.current[String(oppId)])) ||
+                              document.querySelector(`.opponent-card[data-player-id="${oppId}"]`) ||
+                              document.querySelector('.opponent-card.is-turn') ||
+                              document.querySelector('.opponents-zone');
+
+                let dx = 0;
+                let dy = -260;
+                let scale = 0.35;
+
+                if (deckRef.current && oppEl) {
+                    const deckRect = deckRef.current.getBoundingClientRect();
+                    const oppRect = oppEl.getBoundingClientRect();
+
+                    const deckCenterX = deckRect.left + deckRect.width / 2;
+                    const deckCenterY = deckRect.top + deckRect.height / 2;
+                    const oppCenterX = oppRect.left + oppRect.width / 2;
+                    const oppCenterY = oppRect.top + oppRect.height / 2;
+
+                    dx = oppCenterX - deckCenterX;
+                    dy = oppCenterY - deckCenterY;
+                    scale = Math.min(0.4, (oppRect.height * 0.7) / deckRect.height || 0.35);
+                }
+
+                setFlyingStyle({
+                    '--tx': `${dx}px`,
+                    '--ty': `${dy}px`,
+                    '--scale': scale
+                });
+                setFlyingTarget('opponent');
+
+                setTimeout(() => {
+                    setFlyingTarget(null);
+                    setFlyingStyle({});
+                    setFlippedCard(null);
+                }, 500);
+            }, 500);
+        } else {
+            setTimeout(() => {
+                setFlippedCard(null);
+            }, 1700);
+        }
+    }, [triggerCardFlip]);
+
+    const handleOpponentCardFlipRef = useRef(handleOpponentCardFlip);
+    useEffect(() => {
+        handleOpponentCardFlipRef.current = handleOpponentCardFlip;
+    }, [handleOpponentCardFlip]);
 
     // Úvodní animace rozdání 5 karet při startu hry
     useEffect(() => {
@@ -223,20 +295,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             // A) Broadcast: Otočení karty v reálném čase pro soupeře
             .on('broadcast', { event: 'card_flip' }, ({ payload }) => {
                 if (payload?.card) {
-                    triggerCardFlipRef.current?.(payload.card);
-                    if (payload.card === 'safe') {
-                        setTimeout(() => {
-                            setFlyingTarget('opponent');
-                            setTimeout(() => {
-                                setFlyingTarget(null);
-                                setFlippedCard(null);
-                            }, 500);
-                        }, 500);
-                    } else {
-                        setTimeout(() => {
-                            setFlippedCard(null);
-                        }, 1700);
-                    }
+                    handleOpponentCardFlipRef.current?.(payload.card, payload.playerId);
                 }
             })
 
@@ -573,26 +632,82 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 );
             } else {
                 // c) Pokud je karta 'safe' (prázdná):
-                // Po krátkém zobrazení (cca 500 ms po otočení) spusť CSS animaci přesunu dolů do ruky
+                // Po krátkém zobrazení (cca 500 ms po otočení na balíčku) začne fáze přesunu do ruky lokálního hráče
                 await new Promise((resolve) => setTimeout(resolve, 500));
 
+                // 1. Přidej placeholder slot na pravý konec ruky a posuň stávající karty v ruce plynule doleva
+                const handContainer = handCardsContainerRef.current;
+                if (handContainer) {
+                    const existingCards = Array.from(handContainer.querySelectorAll('.my-hand-card:not(.hand-card-slot)'));
+                    const prevRects = existingCards.map((c) => c.getBoundingClientRect().left);
+
+                    flushSync(() => {
+                        setShowHandSlot(true);
+                    });
+
+                    const newRects = existingCards.map((c) => c.getBoundingClientRect().left);
+
+                    existingCards.forEach((card, i) => {
+                        const deltaX = prevRects[i] - newRects[i];
+                        if (deltaX !== 0) {
+                            card.style.transition = 'none';
+                            card.style.transform = `translateX(${deltaX}px)`;
+                        }
+                    });
+
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            existingCards.forEach((card) => {
+                                card.style.transition = '';
+                                card.style.transform = '';
+                            });
+                        });
+                    });
+                } else {
+                    flushSync(() => {
+                        setShowHandSlot(true);
+                    });
+                }
+
+                // 2. Spočti přesný rozdíl souřadnic dx, dy a scale mezi balíčkem a novým slotem na pravém konci ruky
+                let dx = 0;
+                let dy = 260;
+                let scale = 0.45;
+
+                if (deckRef.current && targetSlotRef.current) {
+                    const deckRect = deckRef.current.getBoundingClientRect();
+                    const targetRect = targetSlotRef.current.getBoundingClientRect();
+
+                    const deckCenterX = deckRect.left + deckRect.width / 2;
+                    const deckCenterY = deckRect.top + deckRect.height / 2;
+                    const targetCenterX = targetRect.left + targetRect.width / 2;
+                    const targetCenterY = targetRect.top + targetRect.height / 2;
+
+                    dx = targetCenterX - deckCenterX;
+                    dy = targetCenterY - deckCenterY;
+                    scale = targetRect.width / deckRect.width;
+                }
+
+                // 3. Spusť letící animaci s dynamickými CSS proměnnými (--tx, --ty, --scale)
+                setFlyingStyle({
+                    '--tx': `${dx}px`,
+                    '--ty': `${dy}px`,
+                    '--scale': scale
+                });
                 setFlyingTarget('player');
 
-                // Čas na dokončení přesunu do ruky (přesně 500 ms, během kterých karta v animaci zmizí)
-                await new Promise((resolve) => setTimeout(resolve, 500));
+                // 4. Během 500ms letu karty připrav paralelně data z databáze
+                const [_, fetchRes] = await Promise.all([
+                    new Promise((resolve) => setTimeout(resolve, 500)),
+                    supabase
+                        .from('room_players')
+                        .select('*, uzivatele(prezdivka)')
+                        .eq('room_code', roomCode)
+                        .order('joined_at', { ascending: true })
+                        .catch(() => ({ data: null }))
+                ]);
 
-                // Okamžitě v momentě dokončení animace vyčisti lokální stav animované karty, aby nezůstala viset
-                setFlyingTarget(null);
-                setFlippedCard(null);
-
-                // Jakmile animace doběhne, přidej kartu 'safe' do hráčova pole hand v room_players, aktualizuj deck a předej tah dalšímu hráči.
-                const { data: latestPlayers } = await supabase
-                    .from('room_players')
-                    .select('*, uzivatele(prezdivka)')
-                    .eq('room_code', roomCode)
-                    .order('joined_at', { ascending: true });
-
-                const playerList = latestPlayers || playersRef.current;
+                const playerList = fetchRes?.data || playersRef.current;
                 const meInDb = playerList.find((p) => Number(p.player_id) === Number(user.id));
                 const currentHand = Array.isArray(meInDb?.hand) ? meInDb.hand : (Array.isArray(myPlayer?.hand) ? myPlayer.hand : []);
                 const updatedHand = [...currentHand, 'safe'];
@@ -609,6 +724,18 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     nextPlayerId = Number(nextPlayer.player_id);
                 }
 
+                // 5. Okamžitě a plynule v jedné synchronní dávce nahraď placeholder slot reálnou kartou
+                setPlayers((prev) =>
+                    prev.map((p) =>
+                        Number(p.player_id) === Number(user.id) ? { ...p, hand: updatedHand } : p
+                    )
+                );
+                setShowHandSlot(false);
+                setFlyingTarget(null);
+                setFlyingStyle({});
+                setFlippedCard(null);
+
+                // 6. Ulož novou ruku a dalšího hráče na tahu do Supabase
                 await supabase
                     .from('room_players')
                     .update({ hand: updatedHand })
@@ -625,17 +752,15 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
 
                 setDeck(currentDeck);
                 setCurrentTurnPlayerId(nextPlayerId);
-                setPlayers((prev) =>
-                    prev.map((p) =>
-                        Number(p.player_id) === Number(user.id) ? { ...p, hand: updatedHand } : p
-                    )
-                );
+                currentTurnPlayerIdRef.current = nextPlayerId;
             }
         } catch (err) {
             console.error('Chyba při lízání karty:', err);
             notify('Chyba při lízání karty: ' + err.message, 'error');
         } finally {
             setFlyingTarget(null);
+            setFlyingStyle({});
+            setShowHandSlot(false);
             setFlippedCard(null);
             setIsDrawing(false);
         }
@@ -732,6 +857,14 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                 return (
                                     <div
                                         key={opp.id || opp.player_id}
+                                        ref={(el) => {
+                                            if (el) {
+                                                opponentRefs.current[opp.player_id] = el;
+                                            } else {
+                                                delete opponentRefs.current[opp.player_id];
+                                            }
+                                        }}
+                                        data-player-id={opp.player_id}
                                         className={`opponent-card ${isOppTurn && !isOppDead ? 'is-turn' : ''} ${isOppDead ? 'is-dead' : ''} ${isDisconnected ? 'is-disconnected' : ''}`}
                                     >
                                         <div className="opponent-header">
@@ -778,7 +911,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                             </div>
 
                             {/* Vizuál balíčku karet s 3D flip animací */}
-                            <div className="roulette-deck-display">
+                            <div ref={deckRef} className="roulette-deck-display">
                                 <div className="card-flip-wrap">
                                     {/* Spodní vrstvy balíčku pro fyzický efekt stohu karet */}
                                     {deck.length > 2 && <div className="card-layer layer-back-2"></div>}
@@ -787,6 +920,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                     {/* Samotná vrchní karta s 3D flip animací */}
                                     <div
                                         className={`card-3d-flipper ${flippedCard?.isFlipped ? 'is-flipped' : ''} ${flyingTarget === 'player' ? 'is-flying-to-hand' : flyingTarget === 'opponent' ? 'is-flying-to-opponent' : ''} ${isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? 'is-clickable' : 'not-clickable'}`}
+                                        style={flyingStyle}
                                         onClick={isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? handleDrawCard : undefined}
                                         role={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'button' : undefined}
                                         tabIndex={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 0 : undefined}
@@ -837,7 +971,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                     <section className="my-zone" aria-label="Moje ruka a profil">
                         {/* Ruka hráče */}
                         <div className="my-hand-container">
-                            <div className="my-hand-cards">
+                            <div ref={handCardsContainerRef} className="my-hand-cards">
                                 {myHand.map((cardType, idx) => (
                                     <div
                                         key={idx}
@@ -851,6 +985,15 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                         <div className="hand-card-inner"></div>
                                     </div>
                                 ))}
+                                {showHandSlot && (
+                                    <div
+                                        ref={targetSlotRef}
+                                        className="my-hand-card hand-card-slot"
+                                        style={{ zIndex: myHand.length + 1 }}
+                                    >
+                                        <div className="hand-card-inner slot-inner"></div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
