@@ -820,29 +820,42 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                     {deck.length > 2 && <div className="card-layer layer-back-2"></div>}
                                     {deck.length > 1 && <div className="card-layer layer-back-1"></div>}
 
-                                    {/* Samotná vrchní karta s 3D flip animací */}
-                                    <div
-                                        className={`card-3d-flipper ${flippedCard?.isFlipped ? 'is-flipped' : ''} ${isCardFading ? 'is-fading' : ''} ${isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? 'is-clickable' : 'not-clickable'}`}
-                                        onClick={isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? handleDrawCard : undefined}
-                                        role={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'button' : undefined}
-                                        tabIndex={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 0 : undefined}
-                                        title={isMyTurn && !isMeDead && gameStatus !== 'finished' && !flippedCard ? 'Klikni pro líznutí karty' : undefined}
-                                    >
-                                        {/* Zadní strana karty (rub: tajemná karta se sigilem) */}
-                                        <div className="card-side card-side-back">
-                                            <div className="card-sigil">✨</div>
-                                            <div className="card-label">TAJEMNÁ KARTA</div>
+                                    {/* a) Spodní vrstva (podklad balíčku): statická karta otočená rubem, dokud zbývá v balíčku více než 1 karta */}
+                                    {deck.length > 1 && (
+                                        <div className="card-static-base" aria-hidden="true">
+                                            <div className="card-side card-side-back">
+                                                <div className="card-sigil">✨</div>
+                                                <div className="card-label">TAJEMNÁ KARTA</div>
+                                            </div>
                                         </div>
+                                    )}
 
-                                        {/* Přední strana karty (líc: po otočení - prázdná pro safe, 💀 pro killer) */}
-                                        <div className={`card-side card-side-front ${flippedCard?.card === 'killer' ? 'is-killer' : 'is-safe'}`}>
-                                            {flippedCard?.card === 'killer' && (
-                                                <div className="card-killer-skull" aria-label="Smrtící karta">
-                                                    💀
-                                                </div>
-                                            )}
+                                    {/* b) Vrchní vrstva (lízací karta): provádí 3D flip a fade-out */}
+                                    {deck.length > 0 && (
+                                        <div
+                                            key={deck.length}
+                                            className={`card-3d-flipper ${flippedCard?.isFlipped ? 'is-flipped' : ''} ${isCardFading ? 'is-fading' : ''} ${isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? 'is-clickable' : 'not-clickable'}`}
+                                            onClick={isMyTurn && !isMeDead && gameStatus !== 'finished' && !isDrawing && !flippedCard ? handleDrawCard : undefined}
+                                            role={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 'button' : undefined}
+                                            tabIndex={isMyTurn && !isMeDead && gameStatus !== 'finished' ? 0 : undefined}
+                                            title={isMyTurn && !isMeDead && gameStatus !== 'finished' && !flippedCard ? 'Klikni pro líznutí karty' : undefined}
+                                        >
+                                            {/* Zadní strana karty (rub: tajemná karta se sigilem) */}
+                                            <div className="card-side card-side-back">
+                                                <div className="card-sigil">✨</div>
+                                                <div className="card-label">TAJEMNÁ KARTA</div>
+                                            </div>
+
+                                            {/* Přední strana karty (líc: po otočení - prázdná pro safe, 💀 pro killer) */}
+                                            <div className={`card-side card-side-front ${flippedCard?.card === 'killer' ? 'is-killer' : 'is-safe'}`}>
+                                                {flippedCard?.card === 'killer' && (
+                                                    <div className="card-killer-skull" aria-label="Smrtící karta">
+                                                        💀
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
 

@@ -1200,7 +1200,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                 const isStarting = String(p.player_id) === effectiveStartingPlayerId;
 
                                                 return (
-                                                    <li key={p.id || p.player_id} className={`player-item ${isStarting ? 'is-starting' : ''}`}>
+                                                    <li key={p.id || p.player_id} className={`player-item ${isStarting && isHost ? 'is-starting' : ''}`}>
                                                         <span className="player-item-name">
                                                             {p.is_host ? '👑 ' : ''}
                                                             {playerName}
@@ -1220,25 +1220,31 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                                     ✕
                                                                 </button>
                                                             )}
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    if (isHost && !isRollingStartingPlayer) {
-                                                                        handleSetStartingPlayer(p.player_id, playerName);
-                                                                    }
-                                                                }}
-                                                                className={`btn-flag-starting ${isStarting ? 'is-active' : ''}`}
-                                                                title={
-                                                                    isHost
-                                                                        ? (isStarting ? `Začínající hráč: ${playerName}` : `Určit hráče ${playerName} jako začínajícího`)
-                                                                        : (isStarting ? `Začínající hráč: ${playerName}` : '')
-                                                                }
-                                                                aria-label={isStarting ? `Začínající hráč: ${playerName}` : `Určit hráče ${playerName} jako začínajícího`}
-                                                                style={{ cursor: isHost && !isRollingStartingPlayer ? 'pointer' : 'default' }}
-                                                                disabled={isRollingStartingPlayer}
-                                                            >
-                                                                🚩
-                                                            </button>
+                                                            {isHost ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (!isRollingStartingPlayer) {
+                                                                            handleSetStartingPlayer(p.player_id, playerName);
+                                                                        }
+                                                                    }}
+                                                                    className={`btn-flag-starting ${isStarting ? 'is-active' : ''}`}
+                                                                    title={isStarting ? `Začínající hráč: ${playerName}` : `Určit hráče ${playerName} jako začínajícího`}
+                                                                    aria-label={isStarting ? `Začínající hráč: ${playerName}` : `Určit hráče ${playerName} jako začínajícího`}
+                                                                    style={{ cursor: !isRollingStartingPlayer ? 'pointer' : 'default' }}
+                                                                    disabled={isRollingStartingPlayer}
+                                                                >
+                                                                    🚩
+                                                                </button>
+                                                            ) : isStarting ? (
+                                                                <span
+                                                                    className="flag-starting-guest"
+                                                                    title={`Začínající hráč: ${playerName}`}
+                                                                    aria-label={`Začínající hráč: ${playerName}`}
+                                                                >
+                                                                    🚩
+                                                                </span>
+                                                            ) : null}
                                                         </div>
                                                     </li>
                                                 );

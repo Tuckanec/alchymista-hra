@@ -672,6 +672,23 @@
     cursor: not-allowed !important;
 }
 
+/* Čistá statická vlaječka pro běžné hráče v čekárně (bez rámečku, pozadí a stínu) */
+.flag-starting-guest {
+    font-size: 15px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    cursor: default;
+    user-select: none;
+    pointer-events: none;
+}
+
 .btn-kick {
     background: transparent;
     border: 1px solid transparent;
