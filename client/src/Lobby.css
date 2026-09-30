@@ -341,6 +341,9 @@
 }
 
 .pending-compact-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     font-size: 13px;
     color: #d1d5db;
     text-align: left;
@@ -613,7 +616,7 @@
 .player-item-name {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     font-weight: 500;
 }
 

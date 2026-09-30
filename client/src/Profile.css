@@ -1,0 +1,448 @@
+/* ====================================================================
+   PROFIL HRÁČE A SYSTÉM PŘÁTEL (Profile.css)
+   ==================================================================== */
+
+.profile-container {
+    width: 100%;
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+    box-sizing: border-box;
+}
+
+.profile-card {
+    background: #171324;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 28px 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    box-sizing: border-box;
+}
+
+/* Tlačítko zpět na detailu kamaráda */
+.profile-back-bar {
+    margin-bottom: 20px;
+}
+
+.btn-back-to-my-profile {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e5e7eb;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.btn-back-to-my-profile:hover {
+    background: rgba(167, 139, 250, 0.15);
+    border-color: rgba(167, 139, 250, 0.4);
+    color: #ffffff;
+}
+
+/* Hlavička profilu */
+.profile-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 28px;
+    gap: 14px;
+}
+
+.profile-avatar-wrapper {
+    position: relative;
+}
+
+.profile-avatar-clickable {
+    position: relative;
+    cursor: pointer;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.profile-avatar-clickable .avatar-hover-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+    font-size: 22px;
+}
+
+.profile-avatar-clickable:hover .avatar-hover-overlay {
+    opacity: 1;
+}
+
+.profile-avatar-clickable.uploading {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.profile-title-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.profile-username {
+    font-size: 26px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+    letter-spacing: -0.3px;
+}
+
+.profile-role-tag {
+    font-size: 12px;
+    font-weight: 600;
+    color: #a78bfa;
+    background: rgba(167, 139, 250, 0.12);
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    padding: 3px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.3px;
+}
+
+/* 4 čisté osobní statistiky vedle sebe */
+.profile-stats-section {
+    margin-bottom: 32px;
+}
+
+.profile-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.stat-card {
+    background: #1f1a30;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 16px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.stat-card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-2px);
+}
+
+.stat-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: #f9fafb;
+    line-height: 1.1;
+    margin-bottom: 6px;
+}
+
+.stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.55);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Sekce Přátelé */
+.profile-friends-section {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 24px;
+}
+
+.friends-heading {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 16px 0;
+}
+
+/* Vyhledávací formulář */
+.friend-search-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.friend-search-input {
+    flex: 1;
+    background: #1f1a30;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 11px 16px;
+    color: #ffffff;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.18s ease;
+}
+
+.friend-search-input:focus {
+    border-color: #8b5cf6;
+}
+
+.btn-send-request {
+    background: #7c3aed;
+    border: none;
+    color: #ffffff;
+    padding: 11px 22px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.15s ease;
+    flex-shrink: 0;
+}
+
+.btn-send-request:hover:not(:disabled) {
+    background: #6d28d9;
+    transform: translateY(-1px);
+}
+
+.btn-send-request:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Příchozí nevyřízené žádosti */
+.pending-requests-container {
+    background: rgba(124, 58, 237, 0.08);
+    border: 1px solid rgba(124, 58, 237, 0.25);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+}
+
+.pending-section-title {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #c4b5fd;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+
+.pending-requests-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pending-request-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+}
+
+.pending-user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pending-user-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.pending-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-request-accept {
+    background: #10b981;
+    border: none;
+    color: #ffffff;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+
+.btn-request-accept:hover {
+    background: #059669;
+}
+
+.btn-request-reject {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn-request-reject:hover {
+    background: #ef4444;
+    color: #ffffff;
+}
+
+/* Seznam přátel */
+.friends-list-container {
+    margin-top: 10px;
+}
+
+.friends-empty-hint {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 14px;
+    margin: 12px 0;
+    text-align: center;
+}
+
+.friends-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.friend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1f1a30;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 10px 14px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.friend-item:hover {
+    background: #252038;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.friend-item-clickable {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    cursor: pointer;
+}
+
+.friend-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.btn-remove-friend {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 16px;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.btn-remove-friend:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* Návštěvník / nepřihlášený */
+.profile-guest-card {
+    background: #171324;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 40px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+.profile-guest-icon {
+    font-size: 48px;
+}
+
+.profile-guest-card h2 {
+    font-size: 22px;
+    color: #ffffff;
+    margin: 0;
+}
+
+.profile-guest-text {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    margin: 0 0 8px 0;
+}
+
+.btn-profile-primary {
+    background: #7c3aed;
+    border: none;
+    color: #ffffff;
+    padding: 11px 28px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s ease;
+}
+
+.btn-profile-primary:hover {
+    background: #6d28d9;
+}
+
+.btn-profile-secondary {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.7);
+    padding: 8px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-profile-secondary:hover {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Responzivita pro menší mobily */
+@media (max-width: 520px) {
+    .profile-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .profile-card {
+        padding: 20px 16px;
+    }
+}

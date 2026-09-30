@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
+import Avatar from './Avatar';
 import './GameBoard.css';
 
 export default function GameBoard({ roomCode, roomName, user, isHost, players: initialPlayers = [], onLeaveRoom, onResetToLobby, showToast }) {
@@ -189,7 +190,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 const activeRoom = roomCodeRef.current || roomCode;
                 const { data, error } = await supabase
                     .from('room_players')
-                    .select('*, uzivatele(prezdivka)')
+                    .select('*, uzivatele(prezdivka, avatar_url)')
                     .eq('room_code', activeRoom)
                     .order('joined_at', { ascending: true });
 
@@ -589,6 +590,45 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                         Number(p.player_id) === Number(user.id) ? { ...p, is_dead: true } : p
                     )
                 );
+
+                // Aktualizace statistik v tabulce uzivatele pro všechny schválené hráče
+                try {
+                    const currentApproved = playersRef.current.filter((p) => p.status === 'approved');
+                    const approvedUserIds = currentApproved.map((p) => Number(p.player_id)).filter(Boolean);
+
+                    if (approvedUserIds.length > 0) {
+                        const { data: dbUsers, error: usersErr } = await supabase
+                            .from('uzivatele')
+                            .select('id, games_played, games_won, skulls_drawn')
+                            .in('id', approvedUserIds);
+
+                        if (!usersErr && Array.isArray(dbUsers)) {
+                            // Přeživší vítěz (hráč s is_dead === false a není to ten, kdo právě vytáhl killer)
+                            const survivors = currentApproved.filter(
+                                (p) => Number(p.player_id) !== Number(user.id) && !p.is_dead
+                            );
+                            const winnerId = survivors.length === 1 ? Number(survivors[0].player_id) : null;
+                            const deadId = Number(user.id);
+
+                            for (const u of dbUsers) {
+                                const uId = Number(u.id);
+                                const isSkullDrawer = uId === deadId;
+                                const isWinner = winnerId && uId === winnerId;
+
+                                await supabase
+                                    .from('uzivatele')
+                                    .update({
+                                        games_played: (Number(u.games_played) || 0) + 1,
+                                        skulls_drawn: (Number(u.skulls_drawn) || 0) + (isSkullDrawer ? 1 : 0),
+                                        games_won: (Number(u.games_won) || 0) + (isWinner ? 1 : 0)
+                                    })
+                                    .eq('id', uId);
+                            }
+                        }
+                    }
+                } catch (statsErr) {
+                    console.error('Chyba při aktualizaci statistik po skončení hry:', statsErr);
+                }
             } else {
                 // c) Pokud je karta 'safe' (prázdná):
                 // Po otočení počkej cca 400 ms:
@@ -622,7 +662,7 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                 // Načti aktuální schválené hráče a urči dalšího hráče na tahu
                 const { data: latestPlayers, error: playersErr } = await supabase
                     .from('room_players')
-                    .select('*, uzivatele(prezdivka)')
+                    .select('*, uzivatele(prezdivka, avatar_url)')
                     .eq('room_code', roomCode)
                     .order('joined_at', { ascending: true });
 
@@ -727,6 +767,12 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
             {/* Horní lišta herní desky: vlevo hráč, vpravo čisté tlačítko Opustit hru */}
             <header className="gameboard-topbar">
                 <div className="topbar-user-badge">
+                    <Avatar
+                        avatarUrl={user.avatar_url}
+                        name={user.prezdivka}
+                        size={28}
+                        className="topbar-avatar"
+                    />
                     <span className="topbar-label">Alchymista:</span>
                     <strong className={`topbar-player-name ${isMeDead ? 'text-dead' : ''}`}>
                         {user.prezdivka}
@@ -778,6 +824,12 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                                                 {isOppTurn && !isOppDead && (
                                                     <span className="turn-dot-pulse" title="Na tahu"></span>
                                                 )}
+                                                <Avatar
+                                                    avatarUrl={opp.uzivatele?.avatar_url}
+                                                    name={oppName}
+                                                    size={26}
+                                                    className="opponent-avatar"
+                                                />
                                                 <span className={`opponent-name ${isOppDead ? 'text-dead' : ''}`}>
                                                     {opp.is_host ? '👑 ' : ''}
                                                     {oppName}
@@ -896,6 +948,12 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
                             <div className="my-card-header">
                                 <div className="my-name-wrap">
                                     {isMyTurn && !isMeDead && <span className="turn-dot-pulse" title="Na tahu"></span>}
+                                    <Avatar
+                                        avatarUrl={user.avatar_url}
+                                        name={user.prezdivka}
+                                        size={28}
+                                        className="my-card-avatar"
+                                    />
                                     <span className={`my-name ${isMeDead ? 'text-dead' : ''}`}>
                                         {user.prezdivka} (Ty)
                                     </span>
@@ -926,7 +984,15 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
 
                         <div className="game-over-winner-box">
                             <span className="game-over-winner-label">VÍTĚZ</span>
-                            <h1 className="game-over-winner-name">{winnerName}</h1>
+                            <div className="game-over-winner-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '6px' }}>
+                                <Avatar
+                                    avatarUrl={winnerPlayer?.uzivatele?.avatar_url}
+                                    name={winnerName}
+                                    size={40}
+                                    className="winner-avatar"
+                                />
+                                <h1 className="game-over-winner-name" style={{ margin: 0 }}>{winnerName}</h1>
+                            </div>
                         </div>
 
                         <div className="game-over-actions">

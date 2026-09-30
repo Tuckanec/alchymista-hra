@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import GameBoard from './GameBoard';
 import Auth from './Auth';
+import Profile from './Profile';
+import Avatar from './Avatar';
 import './Lobby.css';
 
 export default function Lobby({ user, onLogin, onLogout, showToast }) {
@@ -18,7 +20,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
     const [checkingRoom, setCheckingRoom] = useState(Boolean(user?.id));
 
     // Navigace v postranním panelu a modální okno pro tvorbu laboratoře / přihlášení
-    const [activeNav, setActiveNav] = useState('lobby'); // 'lobby' | 'profile' | 'stats'
+    const [activeNav, setActiveNav] = useState('lobby'); // 'lobby' | 'profile'
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showAuthModal, setShowAuthModal] = useState(false);
@@ -176,7 +178,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                 // Supabase implicitní join přes cizí klíč player_id -> uzivatele(id)
                 const { data, error } = await supabase
                     .from('room_players')
-                    .select('*, uzivatele(prezdivka)')
+                    .select('*, uzivatele(prezdivka, avatar_url)')
                     .eq('room_code', currentRoom)
                     .order('joined_at', { ascending: true });
 
@@ -439,7 +441,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
             // 2. Kontrola, zda hráč již v místnosti není
             const { data: existing, error: existingError } = await supabase
                 .from('room_players')
-                .select('*, uzivatele(prezdivka)')
+                .select('*, uzivatele(prezdivka, avatar_url)')
                 .eq('room_code', code)
                 .eq('player_id', Number(user.id))
                 .maybeSingle();
@@ -914,34 +916,25 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                             setSidebarOpen(false);
                         }}
                     >
-                        <span className="nav-icon">⚗️</span>
-                        <span className="nav-label">Laboratoř</span>
+                        <span className="nav-icon">🎉</span>
+                        <span className="nav-label">Párty</span>
                     </button>
 
                     <button
                         type="button"
                         className={`nav-item ${activeNav === 'profile' ? 'active' : ''}`}
                         onClick={() => {
-                            setActiveNav('profile');
+                            if (!user) {
+                                setShowAuthModal(true);
+                                notify('Pro zobrazení profilu se nejprve přihlas.', 'info');
+                            } else {
+                                setActiveNav('profile');
+                            }
                             setSidebarOpen(false);
                         }}
                     >
                         <span className="nav-icon">👤</span>
                         <span className="nav-label">Můj Profil</span>
-                        <span className="nav-badge-wip">Připravujeme</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        className={`nav-item ${activeNav === 'stats' ? 'active' : ''}`}
-                        onClick={() => {
-                            setActiveNav('stats');
-                            setSidebarOpen(false);
-                        }}
-                    >
-                        <span className="nav-icon">📊</span>
-                        <span className="nav-label">Statistiky</span>
-                        <span className="nav-badge-wip">Připravujeme</span>
                     </button>
                 </nav>
 
@@ -949,8 +942,21 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                 <div className="sidebar-footer">
                     {user ? (
                         <>
-                            <div className="sidebar-user-card">
-                                <div className="sidebar-avatar">🧙</div>
+                            <div
+                                className="sidebar-user-card"
+                                onClick={() => {
+                                    setActiveNav('profile');
+                                    setSidebarOpen(false);
+                                }}
+                                style={{ cursor: 'pointer' }}
+                                title="Přejít na můj profil"
+                            >
+                                <Avatar
+                                    avatarUrl={user.avatar_url}
+                                    name={user.prezdivka}
+                                    size={38}
+                                    className="sidebar-user-avatar"
+                                />
                                 <div className="sidebar-user-details">
                                     <span className="sidebar-user-name">{user.prezdivka}</span>
                                     <span className="sidebar-user-role">Alchymista</span>
@@ -970,7 +976,7 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                     ) : (
                         <>
                             <div className="sidebar-user-card guest-card">
-                                <div className="sidebar-avatar">👤</div>
+                                <Avatar name="Návštěvník" size={38} />
                                 <div className="sidebar-user-details">
                                     <span className="sidebar-user-name">Návštěvník</span>
                                     <span className="sidebar-user-role">Nepřihlášen</span>
@@ -995,89 +1001,13 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
             {/* Hlavní obsahová část */}
             <main className="layout-content">
                 {activeNav === 'profile' && (
-                    <div className="placeholder-view">
-                        <div className="placeholder-card">
-                            <div className="placeholder-icon">👤</div>
-                            <h2>Můj Profil</h2>
-                            <span className="badge-coming-soon">Připravujeme</span>
-                            {user ? (
-                                <div className="profile-details-preview">
-                                    <div className="profile-row">
-                                        <span>Přezdívka:</span>
-                                        <strong>{user.prezdivka}</strong>
-                                    </div>
-                                    <div className="profile-row">
-                                        <span>Role:</span>
-                                        <strong>Alchymista</strong>
-                                    </div>
-                                    {user.email && (
-                                        <div className="profile-row">
-                                            <span>E-mail:</span>
-                                            <strong>{user.email}</strong>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="profile-guest-notice">
-                                    <p className="placeholder-hint">
-                                        Pro zobrazení svého profilu se musíš nejprve přihlásit.
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAuthModal(true)}
-                                        className="btn-guest-auth"
-                                        style={{ marginBottom: '16px' }}
-                                    >
-                                        Přihlásit / Registrovat
-                                    </button>
-                                </div>
-                            )}
-                            <p className="placeholder-hint">
-                                Možnost změny avataru, přezdívky a herních preferencí bude brzy dostupná.
-                            </p>
-                            <button
-                                type="button"
-                                onClick={() => setActiveNav('lobby')}
-                                className="btn-back-to-lobby"
-                            >
-                                ← Zpět do laboratoře
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {activeNav === 'stats' && (
-                    <div className="placeholder-view">
-                        <div className="placeholder-card">
-                            <div className="placeholder-icon">📊</div>
-                            <h2>Statistiky</h2>
-                            <span className="badge-coming-soon">Připravujeme</span>
-                            <div className="stats-preview-grid">
-                                <div className="stat-box">
-                                    <span className="stat-num">-</span>
-                                    <span className="stat-label">Odehrané hry</span>
-                                </div>
-                                <div className="stat-box">
-                                    <span className="stat-num">-</span>
-                                    <span className="stat-label">Výhry</span>
-                                </div>
-                                <div className="stat-box">
-                                    <span className="stat-num">-</span>
-                                    <span className="stat-label">Přežití</span>
-                                </div>
-                            </div>
-                            <p className="placeholder-hint">
-                                Sledování tvých úspěchů u kotlíku a žebříčky alchymistů připravujeme.
-                            </p>
-                            <button
-                                type="button"
-                                onClick={() => setActiveNav('lobby')}
-                                className="btn-back-to-lobby"
-                            >
-                                ← Zpět do laboratoře
-                            </button>
-                        </div>
-                    </div>
+                    <Profile
+                        user={user}
+                        onUpdateUser={onLogin}
+                        onBackToLobby={() => setActiveNav('lobby')}
+                        showToast={notify}
+                        onOpenAuth={() => setShowAuthModal(true)}
+                    />
                 )}
 
                 {activeNav === 'lobby' && (
@@ -1125,6 +1055,11 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                 return (
                                                     <div key={p.id} className="pending-compact-strip">
                                                         <span className="pending-compact-text">
+                                                            <Avatar
+                                                                avatarUrl={p.uzivatele?.avatar_url}
+                                                                name={playerName}
+                                                                size={22}
+                                                            />
                                                             Hráč <strong>{playerName}</strong> čeká na vpuštění
                                                         </span>
                                                         <div className="pending-compact-actions">
@@ -1182,9 +1117,12 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                     </span>
                                                 </div>
                                                 <div className="roulette-roller-content">
-                                                    <span className="roulette-roller-avatar">
-                                                        {rollingPlayer?.is_host ? '👑' : '🧪'}
-                                                    </span>
+                                                    <Avatar
+                                                        avatarUrl={rollingPlayer?.uzivatele?.avatar_url}
+                                                        name={rollingPlayer?.uzivatele?.prezdivka || 'Alchymista'}
+                                                        size={32}
+                                                        className="roulette-avatar"
+                                                    />
                                                     <span className="roulette-roller-name">
                                                         {rollingPlayer?.uzivatele?.prezdivka || 'Alchymista'}
                                                     </span>
@@ -1202,6 +1140,12 @@ export default function Lobby({ user, onLogin, onLogout, showToast }) {
                                                 return (
                                                     <li key={p.id || p.player_id} className={`player-item ${isStarting && isHost ? 'is-starting' : ''}`}>
                                                         <span className="player-item-name">
+                                                            <Avatar
+                                                                avatarUrl={p.uzivatele?.avatar_url}
+                                                                name={playerName}
+                                                                size={28}
+                                                                className="player-item-avatar"
+                                                            />
                                                             {p.is_host ? '👑 ' : ''}
                                                             {playerName}
                                                             {isMe && <span className="player-me">(Ty)</span>}
