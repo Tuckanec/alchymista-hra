@@ -392,54 +392,11 @@
     transform: rotateY(180deg) scale(1.05);
 }
 
-/* Animace přesunu líznuté karty z balíčku dolů do ruky hráče */
-.card-3d-flipper.is-flying-to-hand {
-    animation: flyToHand 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+/* Plynulé zmizení karty z balíčku po otočení safe karty */
+.card-3d-flipper.is-fading {
+    opacity: 0 !important;
+    transition: opacity 0.25s ease !important;
     pointer-events: none;
-    z-index: 999 !important;
-    transition: none !important;
-}
-
-@keyframes flyToHand {
-    0% {
-        transform: translate3d(0px, 0px, 0) rotateY(180deg) scale(1.05);
-        opacity: 1;
-    }
-    75% {
-        opacity: 1;
-    }
-    88% {
-        opacity: 0.85;
-    }
-    100% {
-        transform: translate3d(var(--tx, 0px), var(--ty, 250px), 0) rotateY(180deg) scale(var(--scale, 0.45));
-        opacity: 0;
-    }
-}
-
-/* Animace přesunu líznuté karty z balíčku nahoru k soupeřům */
-.card-3d-flipper.is-flying-to-opponent {
-    animation: flyToOpponent 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
-    pointer-events: none;
-    z-index: 999 !important;
-    transition: none !important;
-}
-
-@keyframes flyToOpponent {
-    0% {
-        transform: translate3d(0px, 0px, 0) rotateY(180deg) scale(1.05);
-        opacity: 1;
-    }
-    75% {
-        opacity: 1;
-    }
-    88% {
-        opacity: 0.85;
-    }
-    100% {
-        transform: translate3d(var(--tx, 0px), var(--ty, -250px), 0) rotateY(180deg) scale(var(--scale, 0.35));
-        opacity: 0;
-    }
 }
 
 /* Společný styl pro obě strany karty */
@@ -649,28 +606,19 @@
     z-index: 60 !important;
 }
 
-/* Placeholder slot pro novou kartu na pravém konci ruky */
-.my-hand-card.hand-card-slot {
-    border: 1.5px dashed rgba(16, 185, 129, 0.45);
-    background: rgba(16, 185, 129, 0.05);
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.15);
-    pointer-events: none;
-    animation: slotFadeIn 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+/* Animace dosednutí nově líznuté karty do ruky */
+.my-hand-card.card-settle {
+    animation: cardSettle 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.hand-card-slot .slot-inner {
-    background: transparent;
-    border: none;
-}
-
-@keyframes slotFadeIn {
+@keyframes cardSettle {
     0% {
+        transform: translateY(-35px) scale(1.05);
         opacity: 0;
-        transform: scale(0.85);
     }
     100% {
+        transform: translateY(0) scale(1);
         opacity: 1;
-        transform: scale(1);
     }
 }
 
