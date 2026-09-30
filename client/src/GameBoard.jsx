@@ -797,9 +797,6 @@ export default function GameBoard({ roomCode, roomName, user, isHost, players: i
 
                                         <div className="opponent-meta">
                                             <span className="opponent-hand-count">🂠 {opp.hand?.length || 0} v ruce</span>
-                                            <span className={`opponent-status-tag ${isOppDead ? 'tag-dead' : isOppTurn ? 'tag-turn' : 'tag-waiting'}`}>
-                                                {isOppDead ? 'Vyřazen' : isOppTurn ? 'Líže kartu' : 'Čeká'}
-                                            </span>
                                         </div>
                                     </div>
                                 );

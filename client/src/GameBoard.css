@@ -237,7 +237,7 @@
 
 .opponent-meta {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     font-size: 11px;
     color: #9ca3af;
@@ -255,27 +255,6 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-}
-
-.opponent-status-tag {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 4px;
-}
-
-.opponent-status-tag.tag-turn {
-    color: #10b981;
-    background: rgba(16, 185, 129, 0.1);
-}
-
-.opponent-status-tag.tag-dead {
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.1);
-}
-
-.opponent-status-tag.tag-waiting {
-    color: #6b7280;
-    background: rgba(255, 255, 255, 0.04);
 }
 
 .disconnect-countdown {
@@ -308,19 +287,15 @@
 }
 
 .roulette-frame {
-    width: 100%;
-    max-width: 440px;
-    background: #141622;
-    border: 1px solid #282c3f;
-    border-radius: 16px;
-    padding: 24px 20px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
-    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.5);
-    box-sizing: border-box;
+    gap: 12px;
     position: relative;
     overflow: visible;
 }
@@ -566,8 +541,9 @@
     justify-content: center;
     align-items: center;
     width: 100%;
-    padding: 8px 12px 2px 12px;
+    padding: 0 12px;
     box-sizing: border-box;
+    overflow: visible;
 }
 
 .my-hand-cards {
@@ -576,10 +552,16 @@
     align-items: flex-end;
     flex-wrap: nowrap;
     position: relative;
-    padding: 8px 12px;
+    padding: 45px 16px 8px 16px;
+    margin-top: -35px;
     max-width: 100%;
     overflow-x: auto;
-    overflow-y: visible;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.my-hand-cards::-webkit-scrollbar {
+    display: none;
 }
 
 /* Jednotlivá karta v ruce: čistý, elegantní flat design */
